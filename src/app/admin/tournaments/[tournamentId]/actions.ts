@@ -500,9 +500,11 @@ async function reviewPayment(
   const supabase = await adminClient();
   if (!supabase) return { error: "Admin authorization is required." };
 
-  const { error } = await supabase.rpc(
+  const reason = decision === "reject" ? readField(formData, "reason") : "";
+
+  const { data, error } = await supabase.rpc(
     "levelledup_admin_review_tournament_payment",
-    { p_payment_id: paymentId, p_decision: decision },
+    { p_payment_id: paymentId, p_decision: decision, p_reason: reason || null },
   );
 
   if (error) {
@@ -512,6 +514,14 @@ async function reviewPayment(
       message: error.message,
     });
     return { error: registrationError(error) };
+  }
+
+  // Self-approval trap: the database blocked the attempt (notifications were
+  // already written), so surface its message instead of a success.
+  const status = (data as { status?: string; message?: string } | null)?.status;
+  if (status === "blocked") {
+    const message = (data as { message?: string } | null)?.message;
+    return { error: message || "This payment cannot be reviewed by you." };
   }
 
   revalidatePath(`/admin/tournaments/${tournamentPublicId}`);

@@ -81,7 +81,13 @@ function PaymentCard({ payment, tournamentCancelled, tournamentName, tournamentP
             <form action={decision === "verify" ? verifyAction : rejectAction} className="mt-3 flex flex-wrap gap-2 border border-border bg-background/60 p-3">
               <input type="hidden" name="payment_id" value={payment.id} />
               <input type="hidden" name="tournament_public_id" value={tournamentPublicId} />
-              <p className="w-full text-xs text-foreground-muted">{decision === "verify" ? tournamentCancelled ? "Confirm that this preserved payment was genuine. Verification and the matching cancellation credit will be created together." : "Confirm that this payment has been checked against the receiving account." : "Reject this submission. The attempt remains in payment history."}</p>
+              <p className="w-full text-xs text-foreground-muted">{decision === "verify" ? tournamentCancelled ? "Confirm that this preserved payment was genuine. Verification and the matching cancellation credit will be created together." : "Confirm that this payment has been checked against the receiving account." : "Reject this submission. The attempt remains in payment history. A reason is required."}</p>
+              {decision === "reject" ? (
+                <label className="w-full text-xs text-foreground-muted">
+                  <span className="mb-1 block text-[0.5rem] font-semibold uppercase tracking-[0.13em] text-foreground-subtle">Rejection reason (required)</span>
+                  <textarea name="reason" required maxLength={1000} rows={3} placeholder="Why is this payment being rejected?" className="w-full rounded-[2px] border border-border-strong bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground-subtle" />
+                </label>
+              ) : null}
               <button type="submit" disabled={pending} className={`${buttonClass} ${decision === "verify" ? "border-[#79d49b] bg-[#79d49b] text-background" : "border-[#ff8a65] bg-[#ff8a65] text-background"}`}>{pending ? "Updating..." : decision === "verify" ? tournamentCancelled ? "Confirm & Create Credit" : "Confirm Verification" : "Confirm Rejection"}</button>
               <button type="button" disabled={pending} onClick={() => setDecision(null)} className={`${buttonClass} border-border-strong text-foreground-muted`}>Go Back</button>
             </form>
