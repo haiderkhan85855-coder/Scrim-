@@ -265,7 +265,7 @@ alter function public.levelledup_set_match_player_result_updated_at()
 revoke all on function public.levelledup_set_match_player_result_updated_at()
   from public, anon, authenticated;
 
-drop trigger if exists match_player_results_set_updated_at on None;
+drop trigger if exists match_player_results_set_updated_at on public.match_player_results;
 create trigger match_player_results_set_updated_at
 before update on public.match_player_results
 for each row
@@ -662,68 +662,80 @@ grant execute on function public.levelledup_admin_get_lobby_matches(uuid)
   to authenticated;
 
 -- Team results of one match with their player rows as JSON.
-create or replace function public.levelledup_admin_get_match_results(
-  p_match_id uuid
-)
-returns table (
-  result_id uuid,
-  registration_id uuid,
-  team_name text,
-  team_code text,
-  placement integer,
-  kills integer,
-  placement_points integer,
-  kill_points integer,
-  total_points integer,
-  status text,
-  players jsonb
-)
-language plpgsql
-security definer
-set search_path = ''
-set row_security = off
-as $$
+-- Re-run guard: a later migration (070000, Did Not Play) installs a NEWER
+-- shape of this function with an extra did_not_play column. Install this base
+-- version only when no version exists yet: never downgrade the newer shape,
+-- and never fail a re-run with "cannot change return type".
+do $$
 begin
-  perform public.levelledup_require_admin('admin');
+  if to_regprocedure('public.levelledup_admin_get_match_results(uuid)') is null then
+    execute $func$
+    create function public.levelledup_admin_get_match_results(
+      p_match_id uuid
+    )
+    returns table (
+      result_id uuid,
+      registration_id uuid,
+      team_name text,
+      team_code text,
+      placement integer,
+      kills integer,
+      placement_points integer,
+      kill_points integer,
+      total_points integer,
+      status text,
+      players jsonb
+    )
+    language plpgsql
+    security definer
+    set search_path = ''
+    set row_security = off
+    as $body$
+    begin
+      perform public.levelledup_require_admin('admin');
 
-  return query
-  select
-    r.id,
-    r.tournament_registration_id,
-    t.name,
-    t.team_id,
-    r.placement,
-    r.kills,
-    r.placement_points,
-    r.kill_points,
-    r.total_points,
-    r.status,
-    coalesce(
-      (
-        select jsonb_agg(
-          jsonb_build_object(
-            'id', pr.id,
-            'profile_id', pr.profile_id,
-            'player_name', pr.player_name,
-            'pubg_uid', pr.pubg_uid,
-            'kills', pr.kills,
-            'damage_dealt', pr.damage_dealt
-          )
-          order by pr.kills desc, pr.player_name
-        )
-        from public.match_player_results as pr
-        where pr.match_result_id = r.id
-      ),
-      '[]'::jsonb
-    ) as players
-  from public.match_results as r
-  join public.tournament_registrations as reg
-    on reg.id = r.tournament_registration_id
-  join public.teams as t
-    on t.id = reg.team_id
-  where r.tournament_match_id = p_match_id
-  order by r.placement;
-end;
+      return query
+      select
+        r.id,
+        r.tournament_registration_id,
+        t.name,
+        t.team_id,
+        r.placement,
+        r.kills,
+        r.placement_points,
+        r.kill_points,
+        r.total_points,
+        r.status,
+        coalesce(
+          (
+            select jsonb_agg(
+              jsonb_build_object(
+                'id', pr.id,
+                'profile_id', pr.profile_id,
+                'player_name', pr.player_name,
+                'pubg_uid', pr.pubg_uid,
+                'kills', pr.kills,
+                'damage_dealt', pr.damage_dealt
+              )
+              order by pr.kills desc, pr.player_name
+            )
+            from public.match_player_results as pr
+            where pr.match_result_id = r.id
+          ),
+          '[]'::jsonb
+        ) as players
+      from public.match_results as r
+      join public.tournament_registrations as reg
+        on reg.id = r.tournament_registration_id
+      join public.teams as t
+        on t.id = reg.team_id
+      where r.tournament_match_id = p_match_id
+      order by r.placement;
+    end;
+    $body$;
+    $func$;
+  end if;
+end
 $$;
 
 alter function public.levelledup_admin_get_match_results(uuid)
