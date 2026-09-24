@@ -166,7 +166,7 @@ export function TeamDashboard({
         <FormerNameNotice
           teamName={selectedTeam.name}
           formerName={selectedTeam.formerName}
-          noticeKey={selectedTeam.id}
+          noticeKey={`${selectedTeam.id}:${selectedTeam.formerName ?? ""}`}
         />
       ) : null}
       <header className="max-w-3xl">
