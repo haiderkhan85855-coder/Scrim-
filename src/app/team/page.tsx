@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
@@ -9,6 +10,7 @@ import {
   type TeamRole,
   type TeamRosterMember,
 } from "@/components/team/TeamDashboard";
+import { getMyOpenLobbies, type MyOpenLobby } from "./actions";
 import type { PendingLeaveRequest } from "@/components/team/TeamSupportAndLeave";
 import { TeamOnboarding } from "@/components/team/TeamOnboarding";
 import type { PendingDisbandRequest } from "@/components/team/TeamManagementControls";
@@ -444,11 +446,38 @@ export default async function TeamPage() {
     leaveRequests = leaveRequestRows.flat();
   }
 
+  const openLobbiesResult = await getMyOpenLobbies();
+  const openLobbies: MyOpenLobby[] = openLobbiesResult.data ?? [];
+
   return (
     <>
       <AuthenticatedHeader />
       <main className="min-h-svh px-5 pb-12 pt-[calc(var(--header-height)+3rem)] sm:px-8 sm:pb-16 lg:px-10 lg:pb-20">
       <div className="mx-auto w-full max-w-7xl">
+        {openLobbies.length > 0 ? (
+          <section className="mb-6 rounded-[2px] border border-sky-400/40 bg-sky-400/5 p-4 sm:p-5">
+            <p className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-sky-300">
+              Pre-match lobby open
+            </p>
+            <ul className="mt-3 space-y-2">
+              {openLobbies.map((lobby) => (
+                <li key={lobby.match_id}>
+                  <Link
+                    href={`/lobby/${lobby.match_id}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-[2px] border border-border-strong bg-background/60 px-3 py-2 transition-colors hover:border-sky-400/40"
+                  >
+                    <span className="text-sm">
+                      Match {lobby.match_number} · {lobby.team_name}
+                    </span>
+                    <span className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-sky-300">
+                      Enter lobby →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         {teams.length > 0 ? (
           <TeamDashboard
             cancelledTournaments={cancelledTournaments}

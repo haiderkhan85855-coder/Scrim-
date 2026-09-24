@@ -200,7 +200,7 @@ export type AdminLobbyMatch = {
   mapCode: string;
   mapDisplayName: string;
   scheduledStartAt: string;
-  status: "scheduled" | "live" | "completed" | "cancelled";
+  status: "scheduled" | "pre_match" | "live" | "completed" | "cancelled";
   completedAt: string | null;
   resultCount: number;
   finalizedCount: number;

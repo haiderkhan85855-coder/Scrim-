@@ -3,16 +3,20 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 
 import {
+  cancelMatch,
   completeMatch,
   finalizeMatchResult,
   generateLobbyMatches,
   getMatchResultDetails,
+  openPreMatch,
+  reopenMatch,
   saveMatchPlayerResults,
   saveMatchResults,
   type MatchParticipation,
   type MatchResultDetail,
   type RegistrationActionState,
 } from "@/app/admin/tournaments/[tournamentId]/actions";
+import PreMatchLobbyHost from "@/components/admin/PreMatchLobbyHost";
 import type { SlotBoardRow } from "@/components/tournaments/SlotBoard";
 import type {
   AdminLobbyMatch,
@@ -74,6 +78,7 @@ function ActionMessage({ state }: { state: RegistrationActionState }) {
 function StatusBadge({ status }: { status: AdminLobbyMatch["status"] }) {
   const styles: Record<AdminLobbyMatch["status"], string> = {
     scheduled: "border-border-strong text-foreground-muted",
+    pre_match: "border-sky-400/40 text-sky-300",
     live: "border-amber-400/40 text-amber-300",
     completed: "border-emerald-400/40 text-emerald-300",
     cancelled: "border-red-400/40 text-red-300",
@@ -111,6 +116,18 @@ export function TournamentMatchResults({
   );
   const [completeState, completeAction] = useActionState(
     completeMatch,
+    initialActionState,
+  );
+  const [openLobbyState, openLobbyAction] = useActionState(
+    openPreMatch,
+    initialActionState,
+  );
+  const [cancelState, cancelAction] = useActionState(
+    cancelMatch,
+    initialActionState,
+  );
+  const [reopenState, reopenAction] = useActionState(
+    reopenMatch,
     initialActionState,
   );
   const [playersState, playersAction] = useActionState(
@@ -199,6 +216,8 @@ export function TournamentMatchResults({
 
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [showReopenForm, setShowReopenForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -460,12 +479,10 @@ export function TournamentMatchResults({
                         data
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <StatusBadge status={selectedMatch.status} />
-                      {canManage &&
-                      selectedMatch.status !== "completed" &&
-                      selectedMatch.status !== "cancelled" ? (
-                        <form action={completeAction}>
+                      {canManage && selectedMatch.status === "scheduled" ? (
+                        <form action={openLobbyAction}>
                           <input
                             type="hidden"
                             name="tournament_public_id"
@@ -478,15 +495,142 @@ export function TournamentMatchResults({
                           />
                           <button
                             type="submit"
-                            className="rounded-[2px] border border-emerald-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-emerald-300 transition-colors hover:bg-emerald-400/10"
+                            className="rounded-[2px] border border-sky-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-sky-300 transition-colors hover:bg-sky-400/10"
                           >
-                            Complete match
+                            Open pre-match lobby
                           </button>
                         </form>
                       ) : null}
+                      {canManage && selectedMatch.status === "live" ? (
+                        <>
+                          <form action={completeAction}>
+                            <input
+                              type="hidden"
+                              name="tournament_public_id"
+                              value={tournamentPublicId}
+                            />
+                            <input
+                              type="hidden"
+                              name="match_id"
+                              value={selectedMatch.id}
+                            />
+                            <button
+                              type="submit"
+                              className="rounded-[2px] border border-emerald-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-emerald-300 transition-colors hover:bg-emerald-400/10"
+                            >
+                              Complete match
+                            </button>
+                          </form>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowCancelForm((value) => !value)
+                            }
+                            className="rounded-[2px] border border-red-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-red-300 transition-colors hover:bg-red-400/10"
+                          >
+                            Cancel match
+                          </button>
+                        </>
+                      ) : null}
+                      {canManage && selectedMatch.status === "completed" ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowReopenForm((value) => !value)
+                          }
+                          className="rounded-[2px] border border-amber-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-amber-300 transition-colors hover:bg-amber-400/10"
+                        >
+                          Reopen for corrections
+                        </button>
+                      ) : null}
                     </div>
                   </div>
+                  <ActionMessage state={openLobbyState} />
                   <ActionMessage state={completeState} />
+                  {showCancelForm &&
+                  canManage &&
+                  selectedMatch.status === "live" ? (
+                    <form
+                      action={cancelAction}
+                      className="border-b border-border-strong p-4 sm:p-5"
+                    >
+                      <input
+                        type="hidden"
+                        name="tournament_public_id"
+                        value={tournamentPublicId}
+                      />
+                      <input
+                        type="hidden"
+                        name="match_id"
+                        value={selectedMatch.id}
+                      />
+                      <label className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-foreground-muted">
+                        Reason for cancelling — required, logged
+                      </label>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="text"
+                          name="reason"
+                          required
+                          placeholder="Why is this match being cancelled?"
+                          className="flex-1 rounded-[2px] border border-border-strong bg-background px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-[2px] border border-red-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-red-300 transition-colors hover:bg-red-400/10"
+                        >
+                          Confirm cancellation
+                        </button>
+                      </div>
+                      <ActionMessage state={cancelState} />
+                    </form>
+                  ) : null}
+                  {showReopenForm &&
+                  canManage &&
+                  selectedMatch.status === "completed" ? (
+                    <form
+                      action={reopenAction}
+                      className="border-b border-border-strong p-4 sm:p-5"
+                    >
+                      <input
+                        type="hidden"
+                        name="tournament_public_id"
+                        value={tournamentPublicId}
+                      />
+                      <input
+                        type="hidden"
+                        name="match_id"
+                        value={selectedMatch.id}
+                      />
+                      <label className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-foreground-muted">
+                        Reason for reopening — required, logged
+                      </label>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="text"
+                          name="reason"
+                          required
+                          placeholder="What needs correcting?"
+                          className="flex-1 rounded-[2px] border border-border-strong bg-background px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-[2px] border border-amber-400/40 px-4 py-2 text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-amber-300 transition-colors hover:bg-amber-400/10"
+                        >
+                          Confirm reopen
+                        </button>
+                      </div>
+                      <ActionMessage state={reopenState} />
+                    </form>
+                  ) : null}
+                  {selectedMatch.status === "pre_match" ? (
+                    <div className="border-b border-border-strong p-4 sm:p-5">
+                      <PreMatchLobbyHost
+                        matchId={selectedMatch.id}
+                        tournamentPublicId={tournamentPublicId}
+                      />
+                    </div>
+                  ) : null}
 
                   {detailsLoading ? (
                     <p className="p-5 text-sm text-foreground-muted">

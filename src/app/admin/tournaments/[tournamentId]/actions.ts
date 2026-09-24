@@ -1511,3 +1511,200 @@ export async function getMatchResultDetails(
     ),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Match lifecycle: open pre-match lobby, start, cancel, reopen.
+// ---------------------------------------------------------------------------
+
+export type PreMatchLobbyState = {
+  match_id: string;
+  status: string;
+  match_number: number;
+  map_code: string;
+  opened_at: string | null;
+  timer_seconds: number;
+  expires_at: string | null;
+  closed_at: string | null;
+  is_admin: boolean;
+  my_registration_id: string | null;
+  teams: Array<{
+    registration_id: string;
+    team_id: string;
+    team_name: string;
+    is_set: boolean;
+    marked_at: string | null;
+  }>;
+  messages: Array<{
+    id: string;
+    sender_label: string;
+    sender_team_id: string | null;
+    body: string;
+    created_at: string;
+  }>;
+};
+
+export async function openPreMatch(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_open_pre_match", {
+    p_match_id: references.matchId,
+  });
+
+  if (error) {
+    console.error("[Admin: open pre-match lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: "Pre-match lobby opened. Captains can now mark their teams set." };
+}
+
+export async function startMatch(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+  const force = readField(formData, "force") === "yes";
+  const reason = readField(formData, "reason");
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_start_match", {
+    p_match_id: references.matchId,
+    p_force: force,
+    p_reason: reason || null,
+  });
+
+  if (error) {
+    console.error("[Admin: start match]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: "Match started." };
+}
+
+export async function cancelMatch(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+  const reason = readField(formData, "reason");
+  if (!reason) return { error: "A reason is required to cancel a match." };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_cancel_match", {
+    p_match_id: references.matchId,
+    p_reason: reason,
+  });
+
+  if (error) {
+    console.error("[Admin: cancel match]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: "Match cancelled." };
+}
+
+export async function reopenMatch(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+  const reason = readField(formData, "reason");
+  if (!reason) return { error: "A reason is required to reopen a completed match." };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_reopen_match", {
+    p_match_id: references.matchId,
+    p_reason: reason,
+  });
+
+  if (error) {
+    console.error("[Admin: reopen match]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: "Match reopened for corrections. Complete it again when done." };
+}
+
+export async function getLobbyState(
+  matchId: string,
+): Promise<{ data?: PreMatchLobbyState; error?: string }> {
+  if (!uuidPattern.test(matchId)) {
+    return { error: "Select a match first." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc("levelledup_get_pre_match_lobby", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    console.error("[Admin: load pre-match lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: "The lobby could not be loaded." };
+  }
+
+  return { data: data as PreMatchLobbyState };
+}
+
+export async function sendLobbyMessage(
+  matchId: string,
+  body: string,
+): Promise<{ error?: string }> {
+  if (!uuidPattern.test(matchId)) {
+    return { error: "Select a match first." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_send_lobby_message", {
+    p_match_id: matchId,
+    p_body: body,
+  });
+
+  if (error) {
+    console.error("[Admin: send lobby message]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: "The message could not be sent." };
+  }
+
+  return {};
+}

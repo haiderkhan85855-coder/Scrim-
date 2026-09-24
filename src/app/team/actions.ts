@@ -311,3 +311,173 @@ export async function searchTeamsByName(
 
   return { results, searched: true };
 }
+
+// ---------------------------------------------------------------------------
+// Pre-match lobby (captain / co-captain).
+// ---------------------------------------------------------------------------
+
+export type CaptainLobbyState = {
+  match_id: string;
+  status: string;
+  match_number: number;
+  map_code: string;
+  opened_at: string | null;
+  timer_seconds: number;
+  expires_at: string | null;
+  closed_at: string | null;
+  is_admin: boolean;
+  my_registration_id: string | null;
+  teams: Array<{
+    registration_id: string;
+    team_id: string;
+    team_name: string;
+    is_set: boolean;
+    marked_at: string | null;
+  }>;
+  messages: Array<{
+    id: string;
+    sender_label: string;
+    sender_team_id: string | null;
+    body: string;
+    created_at: string;
+  }>;
+};
+
+export type MyOpenLobby = {
+  match_id: string;
+  tournament_id: string;
+  match_number: number;
+  map_code: string;
+  lobby_id: string;
+  opened_at: string | null;
+  expires_at: string | null;
+  team_name: string;
+};
+
+async function lobbyClient() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) return null;
+  return supabase;
+}
+
+export async function getMyOpenLobbies(): Promise<{
+  data?: MyOpenLobby[];
+  error?: string;
+}> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_get_my_pre_match_lobbies",
+  );
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: load open lobbies]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: "Your open lobbies could not be loaded." };
+  }
+
+  return { data: (data ?? []) as MyOpenLobby[] };
+}
+
+export async function getCaptainLobbyState(
+  matchId: string,
+): Promise<{ data?: CaptainLobbyState; error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { data, error } = await supabase.rpc("levelledup_get_pre_match_lobby", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: load lobby]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: "The lobby could not be loaded." };
+  }
+
+  return { data: data as CaptainLobbyState };
+}
+
+export async function markTeamSet(
+  matchId: string,
+): Promise<{ error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { error } = await supabase.rpc("levelledup_mark_team_set", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: mark team set]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: error.message || "Your team could not be marked set." };
+  }
+
+  return {};
+}
+
+export async function unmarkTeamSet(
+  matchId: string,
+): Promise<{ error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { error } = await supabase.rpc("levelledup_unmark_team_set", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: unmark team set]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: error.message || "Your team could not be unmarked." };
+  }
+
+  return {};
+}
+
+export async function sendCaptainLobbyMessage(
+  matchId: string,
+  body: string,
+): Promise<{ error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { error } = await supabase.rpc("levelledup_send_lobby_message", {
+    p_match_id: matchId,
+    p_body: body,
+  });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: send lobby message]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: "The message could not be sent." };
+  }
+
+  return {};
+}
