@@ -1035,3 +1035,423 @@ export async function setTournamentSessionPrice(
   revalidateTournamentSetup(references.tournamentPublicId);
   return { success: "Authoritative Session price updated and audited." };
 }
+
+// ---------------------------------------------------------------------------
+// Match results: generate matches, enter team results, player data, finalize
+// ---------------------------------------------------------------------------
+
+export type MatchPlayerInput = {
+  profileId?: string | null;
+  playerName: string;
+  pubgUid?: string | null;
+  kills: number;
+  damageDealt?: number;
+};
+
+export type MatchResultDetail = {
+  resultId: string;
+  registrationId: string;
+  teamName: string;
+  teamCode: string;
+  placement: number;
+  kills: number;
+  placementPoints: number;
+  killPoints: number;
+  totalPoints: number;
+  status: "draft" | "final";
+  players: Array<{
+    id: string;
+    profileId: string | null;
+    playerName: string;
+    pubgUid: string | null;
+    kills: number;
+    damageDealt: number;
+  }>;
+};
+
+function readMatchFields(formData: FormData) {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const matchId = readField(formData, "match_id");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." } as const;
+  }
+  if (!uuidPattern.test(matchId)) {
+    return { error: "Select a match first." } as const;
+  }
+  return { tournamentPublicId, matchId } as const;
+}
+
+export async function generateLobbyMatches(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const lobbyId = readField(formData, "lobby_id");
+  const mapRotationRaw = readField(formData, "map_rotation");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(lobbyId)) {
+    return { error: "Select a lobby first." };
+  }
+
+  const mapRotation = mapRotationRaw
+    .split(",")
+    .map((code) => code.trim().toLowerCase())
+    .filter(Boolean);
+  if (mapRotationRaw && mapRotation.length === 0) {
+    return { error: "Map rotation must list at least one map code." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_generate_lobby_matches",
+    {
+      p_lobby_id: lobbyId,
+      p_map_rotation: mapRotation.length ? mapRotation : null,
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: generate lobby matches]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  const created = typeof data === "number" ? data : 0;
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return {
+    success:
+      created === 0
+        ? "Matches already exist for this lobby."
+        : `${created} ${created === 1 ? "match" : "matches"} created for this lobby.`,
+  };
+}
+
+type ResultEntry = { registrationId: string; placement: number; kills: number };
+
+function readResultEntries(formData: FormData): ResultEntry[] | { error: string } {
+  const raw = readField(formData, "results_json");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Results could not be read. Please try again." };
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    return { error: "Enter at least one team result." };
+  }
+  const entries: ResultEntry[] = [];
+  for (const item of parsed) {
+    const row = item as Record<string, unknown>;
+    const registrationId =
+      typeof row.registrationId === "string" ? row.registrationId : "";
+    const placement = Number(row.placement);
+    const kills = Number(row.kills);
+    if (!uuidPattern.test(registrationId)) {
+      return { error: "One of the teams is invalid. Please re-check the list." };
+    }
+    if (!Number.isInteger(placement) || placement < 1) {
+      return { error: "Placement must be a whole number of at least 1." };
+    }
+    if (!Number.isInteger(kills) || kills < 0) {
+      return { error: "Kills must be a whole number of 0 or more." };
+    }
+    entries.push({ registrationId, placement, kills });
+  }
+  const placements = entries.map((entry) => entry.placement);
+  if (new Set(placements).size !== placements.length) {
+    return { error: "Two teams share the same placement. Fix the duplicates." };
+  }
+  return entries;
+}
+
+export async function saveMatchResults(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const entries = readResultEntries(formData);
+  if ("error" in entries) return { error: entries.error };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_upsert_match_results",
+    {
+      p_match_id: references.matchId,
+      p_results: entries.map((entry) => ({
+        registration_id: entry.registrationId,
+        placement: entry.placement,
+        kills: entry.kills,
+      })),
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: save match results]", {
+      code: error.code,
+      message: error.message,
+    });
+    if (error.code === "22023" && error.message.includes("not assigned")) {
+      return {
+        error:
+          "One of those teams is not assigned to this match's lobby, so the result was rejected.",
+      };
+    }
+    return { error: registrationError(error) };
+  }
+
+  const saved = typeof data === "number" ? data : entries.length;
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return {
+    success: `${saved} team ${saved === 1 ? "result" : "results"} saved as draft. Finalize each one when checked.`,
+  };
+}
+
+export async function finalizeMatchResult(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const resultId = readField(formData, "result_id");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(resultId)) {
+    return { error: "Select a result to finalize." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_finalize_match_result", {
+    p_match_result_id: resultId,
+  });
+
+  if (error) {
+    console.error("[Admin: finalize match result]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return { success: "Result finalized." };
+}
+
+export async function completeMatch(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_complete_match", {
+    p_match_id: references.matchId,
+  });
+
+  if (error) {
+    console.error("[Admin: complete match]", {
+      code: error.code,
+      message: error.message,
+    });
+    if (error.code === "P4210") {
+      return {
+        error:
+          "Finalize every draft result before completing the match.",
+      };
+    }
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: "Match completed." };
+}
+
+export async function saveMatchPlayerResults(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const resultId = readField(formData, "result_id");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(resultId)) {
+    return { error: "Select a team result first." };
+  }
+
+  const raw = readField(formData, "players_json");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Player data could not be read. Please try again." };
+  }
+  if (!Array.isArray(parsed)) {
+    return { error: "Player data could not be read. Please try again." };
+  }
+
+  const players: MatchPlayerInput[] = [];
+  for (const item of parsed) {
+    const row = item as Record<string, unknown>;
+    const playerName =
+      typeof row.playerName === "string" ? row.playerName.trim() : "";
+    if (!playerName) {
+      return { error: "Every player row needs a name." };
+    }
+    const kills = Number(row.kills);
+    const damageDealt = Number(row.damageDealt ?? 0);
+    if (!Number.isInteger(kills) || kills < 0) {
+      return { error: `Kills for ${playerName} must be 0 or more.` };
+    }
+    if (!Number.isInteger(damageDealt) || damageDealt < 0) {
+      return { error: `Damage for ${playerName} must be 0 or more.` };
+    }
+    const profileId =
+      typeof row.profileId === "string" && row.profileId ? row.profileId : null;
+    if (profileId && !uuidPattern.test(profileId)) {
+      return { error: `Player link for ${playerName} is invalid.` };
+    }
+    players.push({
+      profileId,
+      playerName,
+      pubgUid:
+        typeof row.pubgUid === "string" && row.pubgUid.trim()
+          ? row.pubgUid.trim()
+          : null,
+      kills,
+      damageDealt,
+    });
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_upsert_match_player_results",
+    {
+      p_match_result_id: resultId,
+      p_players: players.map((player) => ({
+        profile_id: player.profileId,
+        player_name: player.playerName,
+        pubg_uid: player.pubgUid,
+        kills: player.kills,
+        damage_dealt: player.damageDealt ?? 0,
+      })),
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: save match player results]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  const saved = typeof data === "number" ? data : players.length;
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return {
+    success:
+      saved === 0
+        ? "Player data cleared for this result."
+        : `Player data saved (${saved} ${saved === 1 ? "player" : "players"}).`,
+  };
+}
+
+export async function getMatchResultDetails(
+  matchId: string,
+): Promise<{ results?: MatchResultDetail[]; error?: string }> {
+  if (!uuidPattern.test(matchId)) {
+    return { error: "Select a match first." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_get_match_results",
+    { p_match_id: matchId },
+  );
+
+  if (error) {
+    console.error("[Admin: load match results]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: "Match results could not be loaded." };
+  }
+
+  const rows = (Array.isArray(data) ? data : []) as Array<{
+    result_id: string;
+    registration_id: string;
+    team_name: string;
+    team_code: string;
+    placement: number;
+    kills: number;
+    placement_points: number;
+    kill_points: number;
+    total_points: number;
+    status: string;
+    players: Array<{
+      id: string;
+      profile_id: string | null;
+      player_name: string;
+      pubg_uid: string | null;
+      kills: number;
+      damage_dealt: number;
+    }>;
+  }>;
+
+  return {
+    results: rows.map((row) => ({
+      resultId: row.result_id,
+      registrationId: row.registration_id,
+      teamName: row.team_name,
+      teamCode: row.team_code,
+      placement: row.placement,
+      kills: row.kills,
+      placementPoints: row.placement_points,
+      killPoints: row.kill_points,
+      totalPoints: row.total_points,
+      status: row.status === "final" ? "final" : "draft",
+      players: (row.players ?? []).map((player) => ({
+        id: player.id,
+        profileId: player.profile_id,
+        playerName: player.player_name,
+        pubgUid: player.pubg_uid,
+        kills: player.kills,
+        damageDealt: player.damage_dealt,
+      })),
+    })),
+  };
+}

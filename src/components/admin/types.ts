@@ -192,3 +192,26 @@ export type AdminTournamentCredit = {
   status: TournamentCreditStatus;
   createdAt: string;
 };
+
+export type AdminLobbyMatch = {
+  id: string;
+  lobbyId: string;
+  matchNumber: number;
+  mapCode: string;
+  mapDisplayName: string;
+  scheduledStartAt: string;
+  status: "scheduled" | "live" | "completed" | "cancelled";
+  completedAt: string | null;
+  resultCount: number;
+  finalizedCount: number;
+  playersPendingCount: number;
+};
+
+export type AdminRosterEntry = {
+  registrationId: string;
+  profileId: string | null;
+  displayName: string;
+  pubgUid: string;
+  pubgIgn: string | null;
+  role: string;
+};

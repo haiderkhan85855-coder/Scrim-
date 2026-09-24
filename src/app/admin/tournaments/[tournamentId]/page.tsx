@@ -6,8 +6,14 @@ import { TournamentRegistrationManagement } from "@/components/admin/TournamentR
 import { TournamentSessionEntryVisibility } from "@/components/admin/TournamentSessionEntryVisibility";
 import { TournamentPaymentManagement } from "@/components/admin/TournamentPaymentManagement";
 import { TournamentLobbyManagement } from "@/components/admin/TournamentLobbyManagement";
+import {
+  TournamentMatchResults,
+  TournamentPendingTasks,
+} from "@/components/admin/TournamentMatchResults";
 import { TournamentStageSessionManagement } from "@/components/admin/TournamentStageSessionManagement";
 import type {
+  AdminLobbyMatch,
+  AdminRosterEntry,
   AdminSessionSetupCheck,
   AdminStageSetup,
   AdminTournamentCredit,
@@ -85,6 +91,7 @@ type TeamRow = {
 type RosterRow = {
   id: string;
   registration_id: string;
+  profile_id: string | null;
   display_name: string;
   pubg_uid: string;
   pubg_ign: string | null;
@@ -164,6 +171,19 @@ type SessionDatabaseRow = {
   fee_currency: string;
   status: AdminTournamentSession["status"];
   is_legacy_backfill: boolean;
+};
+type MatchDatabaseRow = {
+  id: string;
+  lobby_id: string;
+  match_number: number;
+  map_code: string;
+  map_display_name: string;
+  scheduled_start_at: string;
+  status: AdminLobbyMatch["status"];
+  completed_at: string | null;
+  result_count: number;
+  finalized_count: number;
+  players_pending_count: number;
 };
 type StageSetupDatabaseRow = {
   stage_id: string;
@@ -296,6 +316,8 @@ export default async function AdminTournamentPage({
     sessionEntriesResult,
     stageSetupResult,
     sessionChecksResult,
+    matchesResult,
+    pendingPlayersResult,
   ] = await Promise.all([
     teamIds.length
       ? supabase.from("teams").select("id, name, team_id, status").in("id", teamIds)
@@ -304,7 +326,7 @@ export default async function AdminTournamentPage({
       ? supabase
           .from("tournament_registration_roster")
           .select(
-            "id, registration_id, display_name, pubg_uid, pubg_ign, role, revision_number",
+            "id, registration_id, profile_id, display_name, pubg_uid, pubg_ign, role, revision_number",
           )
           .in("registration_id", registrationIds)
           .order("created_at", { ascending: true })
@@ -352,6 +374,12 @@ export default async function AdminTournamentPage({
     supabase.rpc("levelledup_admin_get_stage_session_setup_checks", {
       p_tournament_id: tournament.id,
     }),
+    supabase.rpc("levelledup_admin_get_tournament_matches", {
+      p_tournament_id: tournament.id,
+    }),
+    supabase.rpc("levelledup_admin_get_pending_player_results", {
+      p_tournament_id: tournament.id,
+    }),
   ]);
 
   if (
@@ -365,7 +393,9 @@ export default async function AdminTournamentPage({
     sessionsResult.error ||
     sessionEntriesResult.error ||
     stageSetupResult.error ||
-    sessionChecksResult.error
+    sessionChecksResult.error ||
+    matchesResult.error ||
+    pendingPlayersResult.error
   ) {
     console.error("[Admin: tournament operation dependencies]", {
       rosterError: rosterResult.error?.message ?? null,
@@ -379,6 +409,8 @@ export default async function AdminTournamentPage({
       sessionEntriesError: sessionEntriesResult.error?.message ?? null,
       stageSetupError: stageSetupResult.error?.message ?? null,
       sessionChecksError: sessionChecksResult.error?.message ?? null,
+      matchesError: matchesResult.error?.message ?? null,
+      pendingPlayersError: pendingPlayersResult.error?.message ?? null,
       tournamentPublicId,
     });
     throw new Error("Unable to load tournament operations details.");
@@ -488,6 +520,25 @@ export default async function AdminTournamentPage({
     status: session.status,
     isLegacyBackfill: session.is_legacy_backfill,
   }));
+  const matchList: AdminLobbyMatch[] = (
+    (matchesResult.data ?? []) as MatchDatabaseRow[]
+  ).map((match) => ({
+    id: match.id,
+    lobbyId: match.lobby_id,
+    matchNumber: match.match_number,
+    mapCode: match.map_code,
+    mapDisplayName: match.map_display_name,
+    scheduledStartAt: match.scheduled_start_at,
+    status: match.status,
+    completedAt: match.completed_at,
+    resultCount: Number(match.result_count),
+    finalizedCount: Number(match.finalized_count),
+    playersPendingCount: Number(match.players_pending_count),
+  }));
+  const playersPendingCount = Number(
+    ((pendingPlayersResult.data ?? []) as Array<{ pending_count: number }>)[0]
+      ?.pending_count ?? 0,
+  );
   const stageSetup: AdminStageSetup[] = (
     (stageSetupResult.data ?? []) as StageSetupDatabaseRow[]
   ).map((setup) => ({
@@ -546,6 +597,20 @@ export default async function AdminTournamentPage({
     const members = rosterByRegistration.get(member.registration_id) ?? [];
     members.push(member);
     rosterByRegistration.set(member.registration_id, members);
+  }
+
+  const rosterEntries: AdminRosterEntry[] = [];
+  for (const members of rosterByRegistration.values()) {
+    for (const member of members) {
+      rosterEntries.push({
+        registrationId: member.registration_id,
+        profileId: member.profile_id,
+        displayName: member.display_name,
+        pubgUid: member.pubg_uid,
+        pubgIgn: member.pubg_ign,
+        role: member.role,
+      });
+    }
   }
 
   const registrations: AdminTournamentRegistration[] = registrationRows.map(
@@ -724,6 +789,12 @@ export default async function AdminTournamentPage({
                 >
                   Registrations
                 </a>
+                <a
+                  href="#match-results"
+                  className="rounded-[2px] border border-border-strong px-4 py-2 text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-foreground transition-colors hover:border-accent hover:text-accent"
+                >
+                  Match Results
+                </a>
                 {tournament.entry_fee_minor > 0 || payments.length || credits.length ? (
                   <a
                     href="#payments"
@@ -735,6 +806,8 @@ export default async function AdminTournamentPage({
               </div>
             </div>
           </header>
+
+          <TournamentPendingTasks playersPendingCount={playersPendingCount} />
 
           <section id="overview" className="scroll-mt-28 pt-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -855,6 +928,17 @@ export default async function AdminTournamentPage({
             registrations={registrations}
             sessions={sessions}
             sessionTeamCounts={sessionTeamCounts}
+            slotBoardRows={slotBoardRows}
+            tournamentPublicId={tournament.tournament_id}
+          />
+
+          <TournamentMatchResults
+            canManage={!tournament.archived_at && tournament.status !== "cancelled" && tournament.status !== "completed"}
+            lobbies={lobbies}
+            matches={matchList}
+            rosters={rosterEntries}
+            sessions={sessions}
+            stages={stages}
             slotBoardRows={slotBoardRows}
             tournamentPublicId={tournament.tournament_id}
           />
