@@ -1070,6 +1070,13 @@ export type MatchResultDetail = {
   }>;
 };
 
+export type MatchParticipation = {
+  registrationId: string;
+  teamId: string;
+  teamName: string;
+  teamCode: string;
+};
+
 function readMatchFields(formData: FormData) {
   const tournamentPublicId = readField(
     formData,
@@ -1404,7 +1411,11 @@ export async function saveMatchPlayerResults(
 
 export async function getMatchResultDetails(
   matchId: string,
-): Promise<{ results?: MatchResultDetail[]; error?: string }> {
+): Promise<{
+  results?: MatchResultDetail[];
+  participations?: MatchParticipation[];
+  error?: string;
+}> {
   if (!uuidPattern.test(matchId)) {
     return { error: "Select a match first." };
   }
@@ -1412,10 +1423,15 @@ export async function getMatchResultDetails(
   const supabase = await adminClient();
   if (!supabase) return { error: "Admin authorization is required." };
 
-  const { data, error } = await supabase.rpc(
-    "levelledup_admin_get_match_results",
-    { p_match_id: matchId },
-  );
+  const [{ data, error }, { data: participationData, error: participationError }] =
+    await Promise.all([
+      supabase.rpc("levelledup_admin_get_match_results", {
+        p_match_id: matchId,
+      }),
+      supabase.rpc("levelledup_list_match_participations", {
+        p_match_id: matchId,
+      }),
+    ]);
 
   if (error) {
     console.error("[Admin: load match results]", {
@@ -1423,6 +1439,13 @@ export async function getMatchResultDetails(
       message: error.message,
     });
     return { error: "Match results could not be loaded." };
+  }
+
+  if (participationError) {
+    console.error("[Admin: load match participations]", {
+      code: participationError.code,
+      message: participationError.message,
+    });
   }
 
   const rows = (Array.isArray(data) ? data : []) as Array<{
@@ -1469,5 +1492,22 @@ export async function getMatchResultDetails(
         damageDealt: player.damage_dealt,
       })),
     })),
+    participations: (Array.isArray(participationData)
+      ? participationData
+      : []
+    ).map(
+      (row: {
+        registration_id: string;
+        team_id: string;
+        team_name: string;
+        team_code: string;
+        slot_number: number | null;
+      }) => ({
+        registrationId: row.registration_id,
+        teamId: row.team_id,
+        teamName: row.team_name,
+        teamCode: row.team_code,
+      }),
+    ),
   };
 }

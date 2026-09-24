@@ -9,6 +9,7 @@ import {
   getMatchResultDetails,
   saveMatchPlayerResults,
   saveMatchResults,
+  type MatchParticipation,
   type MatchResultDetail,
   type RegistrationActionState,
 } from "@/app/admin/tournaments/[tournamentId]/actions";
@@ -168,6 +169,9 @@ export function TournamentMatchResults({
     (session) => session.id === sessionId,
   );
 
+  const [details, setDetails] = useState<MatchResultDetail[] | null>(null);
+  const [participations, setParticipations] = useState<MatchParticipation[]>([]);
+
   const lobbyTeams = useMemo(
     () =>
       slotBoardRows.filter(
@@ -176,7 +180,23 @@ export function TournamentMatchResults({
     [slotBoardRows, lobbyId],
   );
 
-  const [details, setDetails] = useState<MatchResultDetail[] | null>(null);
+  // Once a result is recorded for a match, its participation proof is frozen:
+  // the form offers only the teams that played, no matter how lobby
+  // assignments change afterwards. Before the first result there is no proof
+  // yet, so the form falls back to the current lobby assignments.
+  const participationLocked = participations.length > 0;
+  const formTeams = useMemo(
+    () =>
+      participationLocked
+        ? participations.map((participation) => ({
+            registrationId: participation.registrationId,
+            teamName: participation.teamName,
+            teamCode: participation.teamCode,
+          }))
+        : lobbyTeams,
+    [participationLocked, participations, lobbyTeams],
+  );
+
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -184,6 +204,7 @@ export function TournamentMatchResults({
   useEffect(() => {
     if (!matchId) {
       setDetails(null);
+      setParticipations([]);
       return;
     }
     let cancelled = false;
@@ -195,9 +216,11 @@ export function TournamentMatchResults({
       if (result.error || !result.results) {
         setDetailsError(result.error ?? "Match results could not be loaded.");
         setDetails(null);
+        setParticipations([]);
         return;
       }
       setDetails(result.results);
+      setParticipations(result.participations ?? []);
     });
     return () => {
       cancelled = true;
@@ -213,7 +236,7 @@ export function TournamentMatchResults({
   const [entries, setEntries] = useState<Record<string, ResultEntryState>>({});
   useEffect(() => {
     const seeded: Record<string, ResultEntryState> = {};
-    for (const team of lobbyTeams) {
+    for (const team of formTeams) {
       const existing = details?.find(
         (result) => result.registrationId === team.registrationId,
       );
@@ -224,7 +247,7 @@ export function TournamentMatchResults({
       };
     }
     setEntries(seeded);
-  }, [lobbyTeams, details]);
+  }, [formTeams, details]);
 
   const [openPlayerEditor, setOpenPlayerEditor] = useState<string | null>(null);
   const [playerRows, setPlayerRows] = useState<PlayerRowState[]>([]);
@@ -263,7 +286,7 @@ export function TournamentMatchResults({
       kills: number | null;
       did_not_play: boolean;
     }> = [];
-    for (const team of lobbyTeams) {
+    for (const team of formTeams) {
       const entry = entries[team.registrationId as string];
       if (!entry) continue;
       if (entry.didNotPlay) {
@@ -284,7 +307,7 @@ export function TournamentMatchResults({
       });
     }
     return payload;
-  }, [entries, lobbyTeams]);
+  }, [entries, formTeams]);
 
   const playersPayload = useMemo(
     () =>
@@ -501,12 +524,12 @@ export function TournamentMatchResults({
                             Enter team results
                           </h4>
                           <p className="mt-1 text-xs text-foreground-muted">
-                            Only teams assigned to {selectedLobby.label} are
-                            listed. Tick DNP for teams that did not play —
-                            recorded as Did Not Play, never zero.
+                            {participationLocked
+                              ? "Only the teams recorded as playing this match are listed — the lobby roster is frozen once results begin."
+                              : `Only teams assigned to ${selectedLobby.label} are listed. Tick DNP for teams that did not play — recorded as Did Not Play, never zero.`}
                           </p>
                           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {lobbyTeams.map((team) => {
+                            {formTeams.map((team) => {
                               const entry = entries[
                                 team.registrationId as string
                               ] ?? { placement: "", kills: "", didNotPlay: false };
@@ -591,7 +614,7 @@ export function TournamentMatchResults({
                               );
                             })}
                           </div>
-                          {lobbyTeams.length === 0 ? (
+                          {formTeams.length === 0 ? (
                             <p className="mt-3 text-sm text-foreground-muted">
                               No teams are assigned to this lobby yet.
                             </p>
