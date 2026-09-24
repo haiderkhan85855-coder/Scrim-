@@ -17,6 +17,7 @@ import {
   type RegistrationActionState,
 } from "@/app/admin/tournaments/[tournamentId]/actions";
 import PreMatchLobbyHost from "@/components/admin/PreMatchLobbyHost";
+import MatchRoomCard from "@/components/admin/MatchRoomCard";
 import type { SlotBoardRow } from "@/components/tournaments/SlotBoard";
 import type {
   AdminLobbyMatch,
@@ -630,6 +631,12 @@ export function TournamentMatchResults({
                         tournamentPublicId={tournamentPublicId}
                       />
                     </div>
+                  ) : null}
+                  {canManage && selectedMatch.status !== "cancelled" ? (
+                    <MatchRoomCard
+                      matchId={selectedMatch.id}
+                      tournamentPublicId={tournamentPublicId}
+                    />
                   ) : null}
 
                   {detailsLoading ? (

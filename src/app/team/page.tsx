@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import TeamCommsPanel from "@/components/team/TeamCommsPanel";
+
 import {
   TeamDashboard,
   type CancelledTournamentHistory,
@@ -454,6 +456,7 @@ export default async function TeamPage() {
       <AuthenticatedHeader />
       <main className="min-h-svh px-5 pb-12 pt-[calc(var(--header-height)+3rem)] sm:px-8 sm:pb-16 lg:px-10 lg:pb-20">
       <div className="mx-auto w-full max-w-7xl">
+        <TeamCommsPanel />
         {openLobbies.length > 0 ? (
           <section className="mb-6 rounded-[2px] border border-sky-400/40 bg-sky-400/5 p-4 sm:p-5">
             <p className="text-[0.6rem] font-semibold uppercase tracking-[0.13em] text-sky-300">

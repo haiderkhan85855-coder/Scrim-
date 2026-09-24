@@ -1708,3 +1708,129 @@ export async function sendLobbyMessage(
 
   return {};
 }
+
+export async function setWhatsAppLink(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readTournamentSetupReferences(formData);
+  if ("error" in references) return { error: references.error };
+  const link = readField(formData, "whatsapp_link");
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_admin_set_whatsapp_link", {
+    p_tournament_id: references.tournamentId,
+    p_link: link,
+  });
+
+  if (error) {
+    console.error("[Admin: set WhatsApp link]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return {
+    success: link.trim()
+      ? "WhatsApp group link saved. Confirmed teams can now see it."
+      : "WhatsApp group link cleared.",
+  };
+}
+
+export async function setRoomCredentials(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc(
+    "levelledup_admin_set_room_credentials",
+    {
+      p_match_id: references.matchId,
+      p_room_id: readField(formData, "room_id"),
+      p_room_password: readField(formData, "room_password"),
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: set room credentials]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return {
+    success:
+      "Room credentials saved as a draft. Teams cannot see them until you publish.",
+  };
+}
+
+export async function publishRoom(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readMatchFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_publish_room",
+    {
+      p_match_id: references.matchId,
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: publish room]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  const notified = typeof data === "number" ? data : 0;
+  return {
+    success: `Room details published. ${notified} team${notified === 1 ? "" : "s"} notified in-system.`,
+  };
+}
+
+export type AdminRoomState = {
+  room_id: string | null;
+  room_password: string | null;
+  room_published_at: string | null;
+};
+
+export async function getAdminRoomState(
+  matchId: string,
+): Promise<{ data?: AdminRoomState; error?: string }> {
+  if (!uuidPattern.test(matchId)) {
+    return { error: "Select a match first." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc("levelledup_get_match_room", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    return { error: "Room details could not be loaded." };
+  }
+
+  const row = (Array.isArray(data) ? data[0] : null) as AdminRoomState | null;
+  return { data: row ?? { room_id: null, room_password: null, room_published_at: null } };
+}

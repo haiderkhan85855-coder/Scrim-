@@ -481,3 +481,114 @@ export async function sendCaptainLobbyMessage(
 
   return {};
 }
+
+export type MyWhatsAppLink = {
+  tournament_id: string;
+  tournament_name: string;
+  whatsapp_group_link: string;
+};
+
+export async function getMyWhatsAppLinks(): Promise<{
+  data?: MyWhatsAppLink[];
+  error?: string;
+}> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_get_my_whatsapp_links",
+  );
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: WhatsApp links read]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: "WhatsApp links could not be loaded." };
+  }
+
+  return { data: (data ?? []) as MyWhatsAppLink[] };
+}
+
+export type MatchRoomDetails = {
+  room_id: string;
+  room_password: string;
+  published_at: string;
+};
+
+export async function getMatchRoom(
+  matchId: string,
+): Promise<{ data?: MatchRoomDetails; error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { data, error } = await supabase.rpc("levelledup_get_match_room", {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    return { error: "Room details are not available yet." };
+  }
+
+  const row = (Array.isArray(data) ? data[0] : null) as
+    | MatchRoomDetails
+    | null;
+  if (!row?.room_id || !row?.room_password) {
+    return { error: "Room details are not available yet." };
+  }
+  return { data: row };
+}
+
+export type TeamNotification = {
+  id: string;
+  team_id: string;
+  team_name: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+export async function listMyNotifications(): Promise<{
+  data?: TeamNotification[];
+  error?: string;
+}> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_list_my_team_notifications",
+  );
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Teams: notifications read]", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+    return { error: "Notifications could not be loaded." };
+  }
+
+  return { data: (data ?? []) as TeamNotification[] };
+}
+
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<{ error?: string }> {
+  const supabase = await lobbyClient();
+  if (!supabase) return { error: "Your session has expired. Sign in again." };
+
+  const { error } = await supabase.rpc("levelledup_mark_notification_read", {
+    p_notification_id: notificationId,
+  });
+
+  if (error) {
+    return { error: "The notification could not be marked as read." };
+  }
+  return {};
+}

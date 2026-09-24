@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCaptainLobbyState } from "@/app/team/actions";
 import CaptainLobbyHost from "@/components/lobby/CaptainLobbyHost";
+import RoomDetailsCard from "@/components/lobby/RoomDetailsCard";
 import type { LobbyState } from "@/components/lobby/PreMatchLobby";
 
 type LobbyPageProps = {
@@ -36,7 +37,10 @@ export default async function LobbyPage({ params }: LobbyPageProps) {
             {result.error ?? "This lobby could not be loaded."}
           </p>
         ) : (
-          <CaptainLobbyHost initialState={result.data as LobbyState} />
+          <>
+            <RoomDetailsCard matchId={matchId} />
+            <CaptainLobbyHost initialState={result.data as LobbyState} />
+          </>
         )}
       </div>
     </main>

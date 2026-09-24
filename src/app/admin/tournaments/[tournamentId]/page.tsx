@@ -11,6 +11,7 @@ import {
   TournamentPendingTasks,
 } from "@/components/admin/TournamentMatchResults";
 import { TournamentStageSessionManagement } from "@/components/admin/TournamentStageSessionManagement";
+import TournamentWhatsAppCard from "@/components/admin/TournamentWhatsAppCard";
 import type {
   AdminLobbyMatch,
   AdminRosterEntry,
@@ -68,6 +69,7 @@ type TournamentRow = {
   prize_pool_minor: number | null;
   per_kill_reward_minor: number | null;
   archived_at: string | null;
+  whatsapp_group_link: string | null;
 };
 
 type RegistrationRow = {
@@ -265,7 +267,7 @@ export default async function AdminTournamentPage({
   const { data: tournamentData, error: tournamentError } = await supabase
     .from("tournaments")
     .select(
-      "id, tournament_id, name, description, status, scheduled_start_at, scheduled_end_at, registration_opens_at, registration_closes_at, max_team_slots, default_lobby_capacity, max_lobbies, matches_per_day, number_of_days, game_mode, perspective, entry_fee_minor, currency, reward_model, prize_pool_minor, per_kill_reward_minor, archived_at",
+      "id, tournament_id, name, description, status, scheduled_start_at, scheduled_end_at, registration_opens_at, registration_closes_at, max_team_slots, default_lobby_capacity, max_lobbies, matches_per_day, number_of_days, game_mode, perspective, entry_fee_minor, currency, reward_model, prize_pool_minor, per_kill_reward_minor, archived_at, whatsapp_group_link",
     )
     .eq("tournament_id", tournamentPublicId)
     .maybeSingle();
@@ -954,6 +956,17 @@ export default async function AdminTournamentPage({
                 </div>
               ))}
             </dl>
+
+            <TournamentWhatsAppCard
+              tournamentId={tournament.id}
+              tournamentPublicId={tournament.tournament_id}
+              currentLink={tournament.whatsapp_group_link}
+              canManage={
+                !tournament.archived_at &&
+                tournament.status !== "cancelled" &&
+                tournament.status !== "completed"
+              }
+            />
           </section>
 
           <TournamentStageSessionManagement
