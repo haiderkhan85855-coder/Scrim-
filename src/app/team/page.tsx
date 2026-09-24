@@ -176,6 +176,31 @@ export default async function TeamPage() {
       ((teamData ?? []) as Team[]).map((team) => [team.id, team]),
     );
 
+    const nameDisplayResults = await Promise.all(
+      membershipTeamIds.map(async (teamId) => {
+        const { data, error } = await supabase.rpc(
+          "levelledup_get_team_name_display",
+          { p_team_id: teamId },
+        );
+        if (error) {
+          console.error("[Supabase Teams: name display read]", {
+            code: error.code,
+            message: error.message,
+            userReference: user.id.slice(-6),
+          });
+          throw new Error("Unable to load team name history.");
+        }
+        const row = (Array.isArray(data) ? data[0] : null) as {
+          name: string;
+          former_name: string | null;
+        } | null;
+        return { teamId, formerName: row?.former_name ?? null };
+      }),
+    );
+    const formerNameByTeam = new Map(
+      nameDisplayResults.map((entry) => [entry.teamId, entry.formerName]),
+    );
+
     teams = memberships.map((membership) => {
       const team = teamById.get(membership.team_id);
 
@@ -186,6 +211,7 @@ export default async function TeamPage() {
       return {
         id: team.id,
         name: team.name,
+        formerName: formerNameByTeam.get(membership.team_id) ?? null,
         teamId: team.team_id,
         shortName: team.short_name,
         logoUrl: team.logo_url,

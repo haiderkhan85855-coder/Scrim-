@@ -245,3 +245,69 @@ export async function createTeam(
   revalidatePath("/team");
   redirect("/team");
 }
+
+export type TeamNameSearchResult = {
+  teamId: string;
+  teamCode: string;
+  name: string;
+  formerName: string | null;
+  matchedName: string;
+};
+
+export type SearchTeamsActionState = {
+  error?: string;
+  results?: TeamNameSearchResult[];
+  searched?: boolean;
+};
+
+export async function searchTeamsByName(
+  _previousState: SearchTeamsActionState,
+  formData: FormData,
+): Promise<SearchTeamsActionState> {
+  const query = readField(formData, "name_query");
+
+  if (query.length < 2) {
+    return { error: "Enter at least 2 characters to search." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Sign in to search teams." };
+  }
+
+  const { data, error } = await supabase.rpc("levelledup_search_teams", {
+    p_query: query,
+  });
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Supabase Teams: levelledup_search_teams]", {
+        code: error.code,
+        message: error.message,
+        userReference: user.id.slice(-6),
+      });
+    }
+    return { error: "Team search is unavailable right now." };
+  }
+
+  const results = ((Array.isArray(data) ? data : []) as Array<{
+    team_id: string;
+    team_code: string;
+    name: string;
+    former_name: string | null;
+    matched_name: string;
+  }>).map((row) => ({
+    teamId: row.team_id,
+    teamCode: row.team_code,
+    name: row.name,
+    formerName: row.former_name,
+    matchedName: row.matched_name,
+  }));
+
+  return { results, searched: true };
+}

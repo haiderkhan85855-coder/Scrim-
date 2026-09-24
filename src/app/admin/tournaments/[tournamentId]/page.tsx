@@ -419,6 +419,48 @@ export default async function AdminTournamentPage({
   const teams = new Map(
     ((teamsResult.data ?? []) as TeamRow[]).map((team) => [team.id, team]),
   );
+
+  // Historical tournaments show the name each team used at registration time.
+  const { data: registrationNamesData, error: registrationNamesError } =
+    await supabase.rpc("levelledup_admin_get_registration_team_names", {
+      p_tournament_id: tournament.id,
+    });
+
+  if (registrationNamesError) {
+    console.error("[Admin: registration team names]", {
+      code: registrationNamesError.code,
+      message: registrationNamesError.message,
+      tournamentPublicId,
+    });
+    throw new Error("Unable to load historical team names.");
+  }
+
+  const registrationTeamNames = new Map(
+    (
+      (registrationNamesData ?? []) as Array<{
+        registration_id: string;
+        name_at_registration: string | null;
+        current_name: string;
+      }>
+    ).map((row) => [
+      row.registration_id,
+      {
+        atRegistration: row.name_at_registration,
+        current: row.current_name,
+      },
+    ]),
+  );
+
+  function historicalTeamName(
+    registrationId: string | null | undefined,
+    fallback: string,
+  ): string {
+    if (!registrationId) return fallback;
+    const names = registrationTeamNames.get(registrationId);
+    if (!names?.atRegistration) return fallback;
+    if (names.atRegistration === names.current) return names.atRegistration;
+    return `${names.atRegistration} (now ${names.current})`;
+  }
   const rosterByRegistration = new Map<string, RosterRow[]>();
   const paymentRows = (paymentResult.data ?? []) as PaymentRow[];
   const normalizedManualReferences = [
@@ -567,7 +609,10 @@ export default async function AdminTournamentPage({
 
     return {
       id: entry.id,
-      teamName: team?.name ?? "Team record unavailable",
+      teamName: historicalTeamName(
+        registration?.id,
+        team?.name ?? "Team record unavailable",
+      ),
       teamPublicId: team?.team_id ?? "Unavailable",
       stageName: stage?.displayName ?? "Stage record unavailable",
       sessionName: session?.displayName ?? "Session record unavailable",
@@ -648,7 +693,10 @@ export default async function AdminTournamentPage({
 
       return {
         id: registration.id,
-        teamName: team?.name ?? "Team record unavailable",
+        teamName: historicalTeamName(
+          registration.id,
+          team?.name ?? "Team record unavailable",
+        ),
         teamPublicId: team?.team_id ?? "Unavailable",
         teamStatus: team?.status ?? "active",
         status: registration.status,
@@ -693,7 +741,10 @@ export default async function AdminTournamentPage({
     return {
       id: payment.id,
       registrationId: payment.registration_id,
-      teamName: team?.name ?? "Team record unavailable",
+      teamName: historicalTeamName(
+        payment.registration_id,
+        team?.name ?? "Team record unavailable",
+      ),
       teamPublicId: team?.team_id ?? "Unavailable",
       status: payment.status,
       expectedAmountMinor: payment.expected_amount_minor,
@@ -712,7 +763,10 @@ export default async function AdminTournamentPage({
     return {
       id: credit.id,
       registrationId: credit.registration_id,
-      teamName: team?.name ?? "Team record unavailable",
+      teamName: historicalTeamName(
+        credit.registration_id,
+        team?.name ?? "Team record unavailable",
+      ),
       teamPublicId: team?.team_id ?? "Unavailable",
       amountMinor: credit.amount_minor,
       currency: credit.currency,

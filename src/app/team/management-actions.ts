@@ -137,6 +137,10 @@ function mutationErrorMessage(error: RpcFailure, fallback: string) {
       return "You have already approved this disband request.";
     case "42501":
       return "You do not have permission to perform this action.";
+    case "P3004":
+      return "That team could not be found.";
+    case "22023":
+      return error.message || fallback;
     default:
       return fallback;
   }
@@ -370,6 +374,41 @@ export async function transferCaptaincy(
 
   revalidatePath("/team");
   return { success: "Captaincy transferred." };
+}
+
+export async function renameTeam(
+  _previousState: TeamMutationActionState,
+  formData: FormData,
+): Promise<TeamMutationActionState> {
+  const teamId = readField(formData, "team_id");
+  const newName = readField(formData, "new_name");
+
+  if (!uuidPattern.test(teamId)) {
+    return { error: "Select a team to rename." };
+  }
+
+  if (newName.length < 2 || newName.length > 80) {
+    return { error: "Team name must be between 2 and 80 characters." };
+  }
+
+  const result = await callTeamRpcWithData<string>("levelledup_rename_team", {
+    p_team_id: teamId,
+    p_new_name: newName,
+  });
+
+  if ("error" in result) {
+    return {
+      error: mutationErrorMessage(
+        result.error,
+        "The team could not be renamed.",
+      ),
+    };
+  }
+
+  revalidatePath("/team");
+  return {
+    success: `Team renamed to "${result.data}". The old name is preserved in history.`,
+  };
 }
 
 export async function disbandTeam(

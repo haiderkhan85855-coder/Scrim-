@@ -9,6 +9,7 @@ import {
   JoinRequestControls,
   RosterMemberControls,
   TeamDisbandControls,
+  TeamRenameControls,
   type PendingDisbandRequest,
 } from "@/components/team/TeamManagementControls";
 import { TeamOnboarding } from "@/components/team/TeamOnboarding";
@@ -23,6 +24,7 @@ export type TeamRole = "captain" | "co_captain" | "player";
 export type TeamMembership = {
   id: string;
   name: string;
+  formerName: string | null;
   teamId: string;
   shortName: string | null;
   logoUrl: string | null;
@@ -208,6 +210,14 @@ export function TeamDashboard({
               <h2 className="type-display mt-3 break-words text-[clamp(2.6rem,7vw,5.4rem)] uppercase leading-[0.9] lg:whitespace-nowrap lg:text-[clamp(2.8rem,4.8vw,4.8rem)]">
                 {selectedTeam.name}
               </h2>
+              {selectedTeam.formerName ? (
+                <p className="mt-3 text-xs text-foreground-muted">
+                  formerly{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedTeam.formerName}
+                  </span>
+                </p>
+              ) : null}
               {selectedTeam.shortName ? (
                 <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">
                   {selectedTeam.shortName}
@@ -448,6 +458,20 @@ export function TeamDashboard({
             </p>
           </section>
 
+          {viewerIsCaptain ? (
+            <section className="rounded-[2px] border border-border-strong bg-background-elevated/65 p-5">
+              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-accent">
+                Team settings
+              </p>
+              <div className="mt-5">
+                <TeamRenameControls
+                  teamId={selectedTeam.id}
+                  currentName={selectedTeam.name}
+                  formerName={selectedTeam.formerName}
+                />
+              </div>
+            </section>
+          ) : null}
           {viewerIsCaptain ? (
             <section className="rounded-[2px] border border-[#ff8a65]/30 bg-background-elevated/65 p-5">
               <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-[#ff8a65]">

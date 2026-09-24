@@ -12,6 +12,7 @@ import {
   leaveTeam,
   rejectJoinRequest,
   removeRosterMember,
+  renameTeam,
   transferCaptaincy,
 } from "@/app/team/management-actions";
 import type { TeamRole } from "@/components/team/TeamDashboard";
@@ -303,6 +304,81 @@ export type PendingDisbandRequest = {
   callerApproved: boolean;
   isCallerRequester: boolean;
 };
+
+export function TeamRenameControls({
+  teamId,
+  currentName,
+  formerName,
+}: {
+  teamId: string;
+  currentName: string;
+  formerName: string | null;
+}) {
+  const [state, action, pending] = useActionState(renameTeam, initialState);
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className={`${controlButtonClasses} border-border-strong text-foreground-muted hover:border-accent hover:text-accent`}
+      >
+        Rename Team
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[2px] border border-border-strong bg-background p-4">
+      <p className="text-sm font-medium text-foreground">Rename team</p>
+      <p className="mt-2 text-xs leading-5 text-foreground-muted">
+        The old name is preserved in history and stays searchable. Past
+        tournaments keep showing the name the team used then.
+      </p>
+      <form action={action} className="mt-4 space-y-3">
+        <input type="hidden" name="team_id" value={teamId} />
+        <label className="block">
+          <span className="text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-foreground-muted">
+            New team name
+          </span>
+          <input
+            name="new_name"
+            type="text"
+            required
+            minLength={2}
+            maxLength={80}
+            defaultValue={currentName}
+            placeholder="Enter the new team name"
+            className="mt-2 w-full rounded-[2px] border border-border-strong bg-background-elevated px-3 py-2.5 text-sm text-foreground"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className={`${controlButtonClasses} border-accent/50 text-accent hover:bg-accent hover:text-background`}
+          >
+            {pending ? "Renaming..." : "Save New Name"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className={`${controlButtonClasses} border-border-strong text-foreground-muted`}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+      {formerName ? (
+        <p className="mt-3 text-xs text-foreground-subtle">
+          Formerly: {formerName}
+        </p>
+      ) : null}
+      <ActionFeedback states={[state]} />
+    </div>
+  );
+}
 
 export function TeamDisbandControls({
   teamId,
