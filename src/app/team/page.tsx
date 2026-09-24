@@ -9,6 +9,7 @@ import {
   type TeamRole,
   type TeamRosterMember,
 } from "@/components/team/TeamDashboard";
+import type { PendingLeaveRequest } from "@/components/team/TeamSupportAndLeave";
 import { TeamOnboarding } from "@/components/team/TeamOnboarding";
 import type { PendingDisbandRequest } from "@/components/team/TeamManagementControls";
 import type { TeamRecruitmentPost } from "@/components/team/TeamRecruitmentPanel";
@@ -57,6 +58,13 @@ type PendingJoinRequestRow = {
   pubg_ign: string | null;
   pubg_uid: string;
   requested_at: string;
+};
+
+type PendingLeaveRequestRow = {
+  id: string;
+  requester_name: string;
+  is_own_request: boolean;
+  created_at: string;
 };
 
 type RecruitmentPostRow = {
@@ -147,6 +155,7 @@ export default async function TeamPage() {
   let teams: TeamMembership[] = [];
   let roster: TeamRosterMember[] = [];
   let pendingRequests: PendingJoinRequest[] = [];
+  let leaveRequests: PendingLeaveRequest[] = [];
   let recruitmentPosts: TeamRecruitmentPost[] = [];
   let cancelledTournaments: CancelledTournamentHistory[] = [];
   let disbandRequests: {
@@ -406,6 +415,33 @@ export default async function TeamPage() {
         requestedAt: request.requested_at,
       }));
     }
+
+    // Pending leave requests for every team the viewer belongs to (captains
+    // see all pending requests; members see only their own).
+    const leaveRequestRows = await Promise.all(
+      membershipTeamIds.map(async (teamId) => {
+        const { data, error } = await supabase.rpc(
+          "levelledup_list_team_leave_requests",
+          { p_team_id: teamId },
+        );
+        if (error) {
+          console.error("[Supabase Teams: leave requests read]", {
+            code: error.code,
+            message: error.message,
+            userReference: user.id.slice(-6),
+          });
+          throw new Error("Unable to load pending leave requests.");
+        }
+        return ((data ?? []) as PendingLeaveRequestRow[]).map((request) => ({
+          id: request.id,
+          teamId,
+          requesterName: request.requester_name,
+          isOwnRequest: request.is_own_request,
+          createdAt: request.created_at,
+        }));
+      }),
+    );
+    leaveRequests = leaveRequestRows.flat();
   }
 
   return (
@@ -419,6 +455,7 @@ export default async function TeamPage() {
             teams={teams}
             roster={roster}
             pendingRequests={pendingRequests}
+            leaveRequests={leaveRequests}
             recruitmentPosts={recruitmentPosts}
             disbandRequests={disbandRequests}
             canCreate={canCreateTeam}

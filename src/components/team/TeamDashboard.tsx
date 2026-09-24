@@ -17,6 +17,11 @@ import {
   TeamRecruitmentPanel,
   type TeamRecruitmentPost,
 } from "@/components/team/TeamRecruitmentPanel";
+import {
+  LeaveRequestsPanel,
+  SupportButton,
+  type PendingLeaveRequest,
+} from "@/components/team/TeamSupportAndLeave";
 import { Button } from "@/components/ui/Button";
 
 export type TeamRole = "captain" | "co_captain" | "player";
@@ -67,6 +72,7 @@ type TeamDashboardProps = {
   teams: TeamMembership[];
   roster: TeamRosterMember[];
   pendingRequests: PendingJoinRequest[];
+  leaveRequests: PendingLeaveRequest[];
   cancelledTournaments: CancelledTournamentHistory[];
   recruitmentPosts: TeamRecruitmentPost[];
   disbandRequests: { teamId: string; request: PendingDisbandRequest | null }[];
@@ -133,6 +139,7 @@ export function TeamDashboard({
   teams,
   roster,
   pendingRequests,
+  leaveRequests,
   cancelledTournaments,
   recruitmentPosts,
   disbandRequests,
@@ -155,6 +162,9 @@ export function TeamDashboard({
   const selectedDisbandRequest =
     disbandRequests.find((entry) => entry.teamId === selectedTeam.id)?.request ??
     null;
+  const selectedLeaveRequests = leaveRequests.filter(
+    (request) => request.teamId === selectedTeam.id,
+  );
   const viewerIsCaptain = selectedTeam.role === "captain";
   const viewerIsManager =
     selectedTeam.role === "captain" || selectedTeam.role === "co_captain";
@@ -281,6 +291,15 @@ export function TeamDashboard({
               </dd>
             </div>
 
+            {viewerIsCaptain ? (
+              <div className="col-span-2">
+                <SupportButton
+                  teamId={selectedTeam.id}
+                  teamName={selectedTeam.name}
+                />
+              </div>
+            ) : null}
+
             {selectedDisbandRequest &&
             !viewerIsCaptain &&
             !selectedDisbandRequest.isCallerRequester ? (
@@ -296,6 +315,9 @@ export function TeamDashboard({
 
       <div className="mt-8 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-8">
+          {viewerIsCaptain ? (
+            <LeaveRequestsPanel requests={selectedLeaveRequests} />
+          ) : null}
           <section className="rounded-[2px] border border-border-strong bg-background-elevated/65 p-5 sm:p-7">
             <div className="flex items-end justify-between gap-4 border-b border-border pb-5">
               <div>
@@ -366,6 +388,12 @@ export function TeamDashboard({
                     isClaimed={member.isClaimed}
                     isCurrentUser={member.isCurrentUser}
                     viewerIsCaptain={viewerIsCaptain}
+                    hasPendingLeaveRequest={
+                      member.isCurrentUser &&
+                      selectedLeaveRequests.some(
+                        (request) => request.isOwnRequest,
+                      )
+                    }
                   />
                 </article>
               ))}

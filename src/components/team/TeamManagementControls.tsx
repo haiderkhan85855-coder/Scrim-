@@ -9,10 +9,10 @@ import {
   cancelTeamDisband,
   changeRosterRole,
   disbandTeam,
-  leaveTeam,
   rejectJoinRequest,
   removeRosterMember,
   renameTeam,
+  requestTeamLeave,
   transferCaptaincy,
 } from "@/app/team/management-actions";
 import type { TeamRole } from "@/components/team/TeamDashboard";
@@ -95,6 +95,7 @@ type RosterMemberControlsProps = {
   isClaimed: boolean;
   isCurrentUser: boolean;
   viewerIsCaptain: boolean;
+  hasPendingLeaveRequest?: boolean;
 };
 
 export function RosterMemberControls({
@@ -105,13 +106,14 @@ export function RosterMemberControls({
   isClaimed,
   isCurrentUser,
   viewerIsCaptain,
+  hasPendingLeaveRequest = false,
 }: RosterMemberControlsProps) {
   const [roleState, roleAction, rolePending] = useActionState(
     changeRosterRole,
     initialState,
   );
   const [leaveState, leaveAction, leavePending] = useActionState(
-    leaveTeam,
+    requestTeamLeave,
     initialState,
   );
   const [removeState, removeAction, removePending] = useActionState(
@@ -135,12 +137,25 @@ export function RosterMemberControls({
   }
 
   if (isCurrentUser) {
+    if (hasPendingLeaveRequest) {
+      return (
+        <div className="mt-4">
+          <p className="max-w-md text-xs leading-5 text-foreground-muted">
+            Your leave request is with your captain. They must approve it
+            before you are removed.
+          </p>
+          <ActionFeedback states={[leaveState]} />
+        </div>
+      );
+    }
     return (
       <div className="mt-4">
         {confirmation === "leave" ? (
           <div className="rounded-[2px] border border-[#ff8a65]/35 bg-[#ff8a65]/[0.04] p-3">
             <p className="text-xs leading-5 text-foreground-muted">
-              Leave this team? Your membership history will be preserved.
+              Request to leave this team? Your captain will be notified and
+              must approve before you are removed. Your membership history
+              will be preserved.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <form action={leaveAction}>
@@ -150,7 +165,7 @@ export function RosterMemberControls({
                   disabled={leavePending}
                   className={`${controlButtonClasses} border-[#ff8a65]/60 text-[#ff8a65]`}
                 >
-                  {leavePending ? "Leaving..." : "Confirm Leave"}
+                  {leavePending ? "Sending..." : "Send Request"}
                 </button>
               </form>
               <button
@@ -169,7 +184,7 @@ export function RosterMemberControls({
             onClick={() => setConfirmation("leave")}
             className={`${controlButtonClasses} border-border-strong text-foreground-muted hover:border-[#ff8a65]/60 hover:text-[#ff8a65]`}
           >
-            Leave Team
+            Request to Leave
           </button>
         )}
         <ActionFeedback states={[leaveState]} />

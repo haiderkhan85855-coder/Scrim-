@@ -45,6 +45,7 @@ function Feedback({ state }: { state: RegistrationActionState }) {
 export function TournamentLobbyManagement({
   canManage,
   defaultLobbyCapacity,
+  hasStarted,
   lobbies,
   maxLobbies,
   registrations,
@@ -55,6 +56,7 @@ export function TournamentLobbyManagement({
 }: {
   canManage: boolean;
   defaultLobbyCapacity: number;
+  hasStarted: boolean;
   lobbies: AdminTournamentLobby[];
   maxLobbies: number;
   registrations: AdminTournamentRegistration[];
@@ -71,6 +73,19 @@ export function TournamentLobbyManagement({
     String(defaultLobbyCapacity),
   );
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Editing stays available while the event runs (Haider's rule), but every
+  // change after the scheduled start shows a warning confirm first.
+  const confirmAfterStart = (event: React.FormEvent<HTMLFormElement>) => {
+    if (
+      hasStarted &&
+      !window.confirm(
+        "This tournament has already started. Changing lobbies now can affect a running event (for example, results landing on the wrong lobby). Do you want to continue?",
+      )
+    ) {
+      event.preventDefault();
+    }
+  };
 
   const [createState, createAction, createPending] = useActionState(
     createSessionLobby,
@@ -192,6 +207,7 @@ export function TournamentLobbyManagement({
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <form
               action={createAction}
+              onSubmit={confirmAfterStart}
               className="rounded-[2px] border border-border-strong bg-background-elevated/40 p-4 sm:p-5"
             >
               <input
@@ -238,6 +254,7 @@ export function TournamentLobbyManagement({
 
             <form
               action={generateAction}
+              onSubmit={confirmAfterStart}
               className="rounded-[2px] border border-border-strong bg-background-elevated/40 p-4 sm:p-5"
             >
               <input
@@ -396,6 +413,7 @@ export function TournamentLobbyManagement({
 
                   <form
                     action={assignAction}
+                    onSubmit={confirmAfterStart}
                     className="grid gap-3 border-t border-border p-4 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end sm:p-5"
                   >
                     <input
@@ -458,7 +476,7 @@ export function TournamentLobbyManagement({
                   </div>
 
                   <div className="grid gap-4 border-t border-border p-4 sm:p-5 lg:grid-cols-3">
-                    <form action={renameAction} className="grid gap-2">
+                    <form action={renameAction} onSubmit={confirmAfterStart} className="grid gap-2">
                       <input
                         type="hidden"
                         name="tournament_public_id"
@@ -490,7 +508,7 @@ export function TournamentLobbyManagement({
                       <Feedback state={renameState} />
                     </form>
 
-                    <form action={resizeAction} className="grid gap-2">
+                    <form action={resizeAction} onSubmit={confirmAfterStart} className="grid gap-2">
                       <input
                         type="hidden"
                         name="tournament_public_id"
@@ -529,7 +547,7 @@ export function TournamentLobbyManagement({
                     <div className="grid gap-2 content-start">
                       <span className={labelClass}>Danger zone</span>
                       {confirmingDelete ? (
-                        <form action={deleteAction} className="grid gap-2">
+                        <form action={deleteAction} onSubmit={confirmAfterStart} className="grid gap-2">
                           <input
                             type="hidden"
                             name="tournament_public_id"

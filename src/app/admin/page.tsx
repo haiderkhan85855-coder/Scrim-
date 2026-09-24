@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { TournamentManagement } from "@/components/admin/TournamentManagement";
+import {
+  AdminNotifications,
+  type AdminPaymentFlag,
+  type AdminSupportMessage,
+} from "@/components/admin/AdminNotifications";
 import type {
   AdminTournament,
   TournamentGameMode,
@@ -99,6 +104,111 @@ export default async function AdminPage() {
     }),
   );
 
+  // Notifications: captain support messages + payment issues (pending
+  // approvals, duplicate manual references flagged for review).
+  const { data: supportMessageRows, error: supportMessageError } =
+    await supabase.rpc("levelledup_list_support_messages");
+
+  if (supportMessageError) {
+    console.error("[Admin: support messages]", {
+      code: supportMessageError.code,
+      message: supportMessageError.message,
+      userReference: access.userId.slice(-6),
+    });
+    throw new Error("Unable to load notifications.");
+  }
+
+  const supportMessages: AdminSupportMessage[] = (
+    (supportMessageRows ?? []) as {
+      id: string;
+      team_name: string;
+      sender_name: string;
+      message: string;
+      created_at: string;
+      read_at: string | null;
+    }[]
+  ).map((row) => ({
+    id: row.id,
+    teamName: row.team_name,
+    senderName: row.sender_name,
+    message: row.message,
+    createdAt: row.created_at,
+    readAt: row.read_at,
+  }));
+
+  const { data: paymentIssueRows, error: paymentIssueError } = await supabase
+    .from("tournament_registration_payments")
+    .select(
+      "id, tournament_id, status, payment_method, manual_reference_normalized",
+    )
+    .or(
+      "status.eq.pending,and(payment_method.eq.manual,status.neq.rejected,manual_reference_normalized.not.is.null)",
+    );
+
+  if (paymentIssueError) {
+    console.error("[Admin: payment issues]", {
+      code: paymentIssueError.code,
+      message: paymentIssueError.message,
+      userReference: access.userId.slice(-6),
+    });
+    throw new Error("Unable to load notifications.");
+  }
+
+  const tournamentById = new Map(
+    tournaments.map((tournament) => [tournament.id, tournament]),
+  );
+  const manualReferenceCounts = new Map<string, number>();
+  for (const row of (paymentIssueRows ?? []) as {
+    manual_reference_normalized: string | null;
+  }[]) {
+    if (row.manual_reference_normalized) {
+      manualReferenceCounts.set(
+        row.manual_reference_normalized,
+        (manualReferenceCounts.get(row.manual_reference_normalized) ?? 0) + 1,
+      );
+    }
+  }
+  const pendingByTournament = new Map<string, number>();
+  const conflictByTournament = new Map<string, number>();
+  for (const row of (paymentIssueRows ?? []) as {
+    id: string;
+    tournament_id: string;
+    status: string;
+    payment_method: string;
+    manual_reference_normalized: string | null;
+  }[]) {
+    if (!tournamentById.has(row.tournament_id)) continue;
+    if (row.status === "pending") {
+      pendingByTournament.set(
+        row.tournament_id,
+        (pendingByTournament.get(row.tournament_id) ?? 0) + 1,
+      );
+    }
+    if (
+      row.payment_method === "manual" &&
+      row.status !== "rejected" &&
+      row.manual_reference_normalized &&
+      (manualReferenceCounts.get(row.manual_reference_normalized) ?? 0) > 1
+    ) {
+      conflictByTournament.set(
+        row.tournament_id,
+        (conflictByTournament.get(row.tournament_id) ?? 0) + 1,
+      );
+    }
+  }
+  const paymentFlags: AdminPaymentFlag[] = [];
+  for (const [tournamentId, tournament] of tournamentById) {
+    const pendingCount = pendingByTournament.get(tournamentId) ?? 0;
+    const conflictCount = conflictByTournament.get(tournamentId) ?? 0;
+    if (pendingCount === 0 && conflictCount === 0) continue;
+    paymentFlags.push({
+      tournamentPublicId: tournament.tournamentId,
+      tournamentName: tournament.name,
+      pendingCount,
+      conflictCount,
+    });
+  }
+
   return (
     <>
       <AuthenticatedHeader />
@@ -117,6 +227,11 @@ export default async function AdminPage() {
               Signed in as {access.role.replace("_", " ")}
             </p>
           </header>
+
+          <AdminNotifications
+            supportMessages={supportMessages}
+            paymentFlags={paymentFlags}
+          />
 
           <TournamentManagement tournaments={tournaments} />
         </div>

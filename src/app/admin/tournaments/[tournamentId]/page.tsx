@@ -975,7 +975,8 @@ export default async function AdminTournamentPage({
           <TournamentSessionEntryVisibility entries={sessionEntries} />
 
           <TournamentLobbyManagement
-            canManage={beforeStart && !tournament.archived_at && tournament.status !== "cancelled" && tournament.status !== "completed"}
+            canManage={!tournament.archived_at && tournament.status !== "cancelled" && tournament.status !== "completed"}
+            hasStarted={!beforeStart}
             defaultLobbyCapacity={tournament.default_lobby_capacity}
             lobbies={lobbies}
             maxLobbies={tournament.max_lobbies}

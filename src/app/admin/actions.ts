@@ -508,3 +508,36 @@ export async function retireTournament(
     ? { success: "Untouched tournament draft deleted." }
     : { success: "Tournament archived. History was preserved and eligible cancellation credits were created." };
 }
+
+export async function markSupportMessageRead(
+  _previousState: TournamentActionState,
+  formData: FormData,
+): Promise<TournamentActionState> {
+  const messageId = readField(formData, "message_id");
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      messageId,
+    )
+  ) {
+    return { error: "Message reference is invalid." };
+  }
+
+  const supabase = await authorizeAdminAction();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc("levelledup_mark_support_message_read", {
+    p_message_id: messageId,
+  });
+
+  if (error) {
+    console.error("[Admin: mark support message read]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: "The message could not be marked as read." };
+  }
+
+  revalidatePath("/admin");
+  return { success: "Message marked as read." };
+}

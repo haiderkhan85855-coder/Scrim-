@@ -301,7 +301,7 @@ export async function changeRosterRole(
   return { success: "Squad role updated." };
 }
 
-export async function leaveTeam(
+export async function requestTeamLeave(
   _previousState: TeamMutationActionState,
   formData: FormData,
 ): Promise<TeamMutationActionState> {
@@ -311,16 +311,82 @@ export async function leaveTeam(
     return { error: "Invalid team." };
   }
 
-  const error = await callTeamRpc("levelledup_leave_team", {
+  const result = await callTeamRpcWithData<string>("levelledup_request_team_leave", {
     p_team_id: teamId,
   });
 
-  if (error) {
-    return { error: mutationErrorMessage(error, "The team could not be left.") };
+  if ("error" in result) {
+    if (result.error.code === "P3013") {
+      return { error: "You already have a pending leave request for this team." };
+    }
+    return {
+      error: mutationErrorMessage(result.error, "The leave request could not be sent."),
+    };
   }
 
   revalidatePath("/team");
-  return { success: "You left the team." };
+  return { success: "Leave request sent to your captain for approval." };
+}
+
+export async function decideLeaveRequest(
+  _previousState: TeamMutationActionState,
+  formData: FormData,
+): Promise<TeamMutationActionState> {
+  const requestId = readField(formData, "request_id");
+  const decision = readField(formData, "decision");
+
+  if (!uuidPattern.test(requestId) || (decision !== "approve" && decision !== "reject")) {
+    return { error: "Invalid leave request decision." };
+  }
+
+  const error = await callTeamRpc("levelledup_decide_team_leave", {
+    p_request_id: requestId,
+    p_approve: decision === "approve",
+  });
+
+  if (error) {
+    return {
+      error: mutationErrorMessage(error, "The leave request could not be decided."),
+    };
+  }
+
+  revalidatePath("/team");
+  return {
+    success:
+      decision === "approve"
+        ? "Leave request approved. The member has been removed."
+        : "Leave request rejected.",
+  };
+}
+
+export async function sendSupportMessage(
+  _previousState: TeamMutationActionState,
+  formData: FormData,
+): Promise<TeamMutationActionState> {
+  const teamId = readField(formData, "team_id");
+  const message = readField(formData, "message");
+
+  if (!uuidPattern.test(teamId)) {
+    return { error: "Invalid team." };
+  }
+
+  if (message.length < 1 || message.length > 2000) {
+    return { error: "The message must be between 1 and 2000 characters." };
+  }
+
+  const result = await callTeamRpcWithData<string>("levelledup_send_support_message", {
+    p_team_id: teamId,
+    p_message: message,
+  });
+
+  if ("error" in result) {
+    return {
+      error: mutationErrorMessage(result.error, "The message could not be sent."),
+    };
+  }
+
+  revalidatePath("/team");
+  return { success: "Message sent to the admin. They will review it shortly." };
 }
 
 export async function removeRosterMember(
