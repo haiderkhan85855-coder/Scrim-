@@ -91,6 +91,44 @@ function teamMark(team: TeamMembership) {
     .toUpperCase();
 }
 
+function FormerNameNotice({
+  teamName,
+  formerName,
+  noticeKey,
+}: {
+  teamName: string;
+  formerName: string;
+  noticeKey: string;
+}) {
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  if (dismissedKey === noticeKey) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Former team name notice"
+    >
+      <div className="w-full max-w-sm rounded-[2px] border border-border-strong bg-background-elevated p-6 text-center">
+        <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          Name history
+        </p>
+        <p className="mt-3 text-sm leading-6 text-foreground">
+          <span className="font-semibold">{teamName}</span> was formerly known
+          as <span className="font-semibold">{formerName}</span>.
+        </p>
+        <button
+          type="button"
+          onClick={() => setDismissedKey(noticeKey)}
+          className="mt-5 inline-flex min-h-9 items-center justify-center rounded-[2px] border border-accent/50 px-5 text-[0.56rem] font-semibold uppercase tracking-[0.15em] text-accent transition-colors hover:bg-accent hover:text-background"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function TeamDashboard({
   teams,
   roster,
@@ -124,6 +162,13 @@ export function TeamDashboard({
 
   return (
     <>
+      {selectedTeam.formerName ? (
+        <FormerNameNotice
+          teamName={selectedTeam.name}
+          formerName={selectedTeam.formerName}
+          noticeKey={selectedTeam.id}
+        />
+      ) : null}
       <header className="max-w-3xl">
         <p className="type-eyebrow text-accent">Team command</p>
         <h1 className="type-display mt-5 text-[clamp(3.2rem,8vw,6.5rem)] uppercase leading-[0.88]">
@@ -210,14 +255,6 @@ export function TeamDashboard({
               <h2 className="type-display mt-3 break-words text-[clamp(2.6rem,7vw,5.4rem)] uppercase leading-[0.9] lg:whitespace-nowrap lg:text-[clamp(2.8rem,4.8vw,4.8rem)]">
                 {selectedTeam.name}
               </h2>
-              {selectedTeam.formerName ? (
-                <p className="mt-3 text-xs text-foreground-muted">
-                  formerly{" "}
-                  <span className="font-semibold text-foreground">
-                    {selectedTeam.formerName}
-                  </span>
-                </p>
-              ) : null}
               {selectedTeam.shortName ? (
                 <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-foreground-muted">
                   {selectedTeam.shortName}
