@@ -34,7 +34,11 @@ type TournamentMatchResultsProps = {
   tournamentPublicId: string;
 };
 
-type ResultEntryState = { placement: string; kills: string };
+type ResultEntryState = {
+  placement: string;
+  kills: string;
+  didNotPlay: boolean;
+};
 
 type PlayerRowState = {
   profileId: string | null;
@@ -214,8 +218,9 @@ export function TournamentMatchResults({
         (result) => result.registrationId === team.registrationId,
       );
       seeded[team.registrationId as string] = {
-        placement: existing ? String(existing.placement) : "",
-        kills: existing ? String(existing.kills) : "",
+        placement: existing && !existing.didNotPlay ? String(existing.placement) : "",
+        kills: existing && !existing.didNotPlay ? String(existing.kills) : "",
+        didNotPlay: existing?.didNotPlay ?? false,
       };
     }
     setEntries(seeded);
@@ -254,16 +259,28 @@ export function TournamentMatchResults({
   const resultsPayload = useMemo(() => {
     const payload: Array<{
       registrationId: string;
-      placement: number;
-      kills: number;
+      placement: number | null;
+      kills: number | null;
+      did_not_play: boolean;
     }> = [];
     for (const team of lobbyTeams) {
       const entry = entries[team.registrationId as string];
-      if (!entry || !entry.placement.trim()) continue;
+      if (!entry) continue;
+      if (entry.didNotPlay) {
+        payload.push({
+          registrationId: team.registrationId as string,
+          placement: null,
+          kills: null,
+          did_not_play: true,
+        });
+        continue;
+      }
+      if (!entry.placement.trim()) continue;
       payload.push({
         registrationId: team.registrationId as string,
         placement: Number(entry.placement),
         kills: Number(entry.kills || 0),
+        did_not_play: false,
       });
     }
     return payload;
@@ -485,26 +502,50 @@ export function TournamentMatchResults({
                           </h4>
                           <p className="mt-1 text-xs text-foreground-muted">
                             Only teams assigned to {selectedLobby.label} are
-                            listed. Skip teams that did not play.
+                            listed. Tick DNP for teams that did not play —
+                            recorded as Did Not Play, never zero.
                           </p>
                           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {lobbyTeams.map((team) => {
                               const entry = entries[
                                 team.registrationId as string
-                              ] ?? { placement: "", kills: "" };
+                              ] ?? { placement: "", kills: "", didNotPlay: false };
                               return (
                                 <div
                                   key={team.registrationId}
-                                  className="flex items-center gap-2 rounded-[2px] border border-border-strong bg-background p-2.5"
+                                  className={`flex items-center gap-2 rounded-[2px] border p-2.5 ${
+                                    entry.didNotPlay
+                                      ? "border-border bg-background/40 opacity-60"
+                                      : "border-border-strong bg-background"
+                                  }`}
                                 >
                                   <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                                     {team.teamName}
                                   </span>
+                                  <label className="flex shrink-0 items-center gap-1 text-[0.6rem] uppercase tracking-wide text-foreground-muted">
+                                    <input
+                                      type="checkbox"
+                                      checked={entry.didNotPlay}
+                                      onChange={(event) =>
+                                        setEntries((prev) => ({
+                                          ...prev,
+                                          [team.registrationId as string]: {
+                                            placement: "",
+                                            kills: "",
+                                            didNotPlay: event.target.checked,
+                                          },
+                                        }))
+                                      }
+                                      className="h-3.5 w-3.5 accent-[var(--accent)]"
+                                    />
+                                    DNP
+                                  </label>
                                   <input
                                     inputMode="numeric"
                                     placeholder="#"
                                     aria-label={`Placement for ${team.teamName}`}
                                     value={entry.placement}
+                                    disabled={entry.didNotPlay}
                                     onChange={(event) =>
                                       setEntries((prev) => ({
                                         ...prev,
@@ -516,16 +557,18 @@ export function TournamentMatchResults({
                                           kills: prev[
                                             team.registrationId as string
                                           ]?.kills ?? "",
+                                          didNotPlay: false,
                                         },
                                       }))
                                     }
-                                    className="w-14 rounded-[2px] border border-border-strong bg-background-elevated px-2 py-1.5 text-center text-sm text-foreground"
+                                    className="w-14 rounded-[2px] border border-border-strong bg-background-elevated px-2 py-1.5 text-center text-sm text-foreground disabled:opacity-40"
                                   />
                                   <input
                                     inputMode="numeric"
                                     placeholder="kills"
                                     aria-label={`Kills for ${team.teamName}`}
                                     value={entry.kills}
+                                    disabled={entry.didNotPlay}
                                     onChange={(event) =>
                                       setEntries((prev) => ({
                                         ...prev,
@@ -538,10 +581,11 @@ export function TournamentMatchResults({
                                             /[^0-9]/g,
                                             "",
                                           ),
+                                          didNotPlay: false,
                                         },
                                       }))
                                     }
-                                    className="w-16 rounded-[2px] border border-border-strong bg-background-elevated px-2 py-1.5 text-center text-sm text-foreground"
+                                    className="w-16 rounded-[2px] border border-border-strong bg-background-elevated px-2 py-1.5 text-center text-sm text-foreground disabled:opacity-40"
                                   />
                                 </div>
                               );
@@ -577,12 +621,22 @@ export function TournamentMatchResults({
                             {(details ?? []).map((result) => (
                               <li
                                 key={result.resultId}
-                                className="rounded-[2px] border border-border-strong bg-background p-3"
+                                className={`rounded-[2px] border p-3 ${
+                                  result.didNotPlay
+                                    ? "border-border bg-background/40 opacity-60"
+                                    : "border-border-strong bg-background"
+                                }`}
                               >
                                 <div className="flex flex-wrap items-center gap-3">
-                                  <span className="flex h-8 w-8 items-center justify-center rounded-[2px] bg-accent/15 text-sm font-bold text-accent">
-                                    {result.placement}
-                                  </span>
+                                  {result.didNotPlay ? (
+                                    <span className="flex h-8 items-center justify-center rounded-[2px] bg-foreground-subtle/15 px-2 text-[0.6rem] font-bold uppercase tracking-wide text-foreground-subtle">
+                                      DNP
+                                    </span>
+                                  ) : (
+                                    <span className="flex h-8 w-8 items-center justify-center rounded-[2px] bg-accent/15 text-sm font-bold text-accent">
+                                      {result.placement}
+                                    </span>
+                                  )}
                                   <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-semibold text-foreground">
                                       {result.teamName}
@@ -590,20 +644,26 @@ export function TournamentMatchResults({
                                         {result.teamCode}
                                       </span>
                                     </p>
-                                    <p className="text-xs text-foreground-muted">
-                                      {result.kills} kills ·{" "}
-                                      {result.totalPoints} pts
-                                      {result.players.length === 0 ? (
-                                        <span className="ml-2 rounded-[2px] bg-amber-400/20 px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">
-                                          Player data pending
-                                        </span>
-                                      ) : (
-                                        <span className="ml-2 text-foreground-subtle">
-                                          {result.players.length} players
-                                          recorded
-                                        </span>
-                                      )}
-                                    </p>
+                                    {result.didNotPlay ? (
+                                      <p className="text-xs uppercase tracking-wide text-foreground-subtle">
+                                        Did Not Play
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-foreground-muted">
+                                        {result.kills} kills ·{" "}
+                                        {result.totalPoints} pts
+                                        {result.players.length === 0 ? (
+                                          <span className="ml-2 rounded-[2px] bg-amber-400/20 px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">
+                                            Player data pending
+                                          </span>
+                                        ) : (
+                                          <span className="ml-2 text-foreground-subtle">
+                                            {result.players.length} players
+                                            recorded
+                                          </span>
+                                        )}
+                                      </p>
+                                    )}
                                   </div>
                                   <span
                                     className={`rounded-[2px] border px-2 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.12em] ${
@@ -616,13 +676,15 @@ export function TournamentMatchResults({
                                   </span>
                                   {canManage ? (
                                     <div className="flex gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => openPlayers(result)}
-                                        className="rounded-[2px] border border-border-strong px-3 py-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-foreground-muted transition-colors hover:border-accent hover:text-accent"
-                                      >
-                                        Player data
-                                      </button>
+                                      {!result.didNotPlay ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openPlayers(result)}
+                                          className="rounded-[2px] border border-border-strong px-3 py-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-foreground-muted transition-colors hover:border-accent hover:text-accent"
+                                        >
+                                          Player data
+                                        </button>
+                                      ) : null}
                                       {result.status === "draft" &&
                                       selectedMatch.status !== "completed" &&
                                       selectedMatch.status !== "cancelled" ? (

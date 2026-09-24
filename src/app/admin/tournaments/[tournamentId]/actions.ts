@@ -1053,11 +1053,12 @@ export type MatchResultDetail = {
   registrationId: string;
   teamName: string;
   teamCode: string;
-  placement: number;
-  kills: number;
-  placementPoints: number;
-  killPoints: number;
-  totalPoints: number;
+  placement: number | null;
+  kills: number | null;
+  placementPoints: number | null;
+  killPoints: number | null;
+  totalPoints: number | null;
+  didNotPlay: boolean;
   status: "draft" | "final";
   players: Array<{
     id: string;
@@ -1140,7 +1141,12 @@ export async function generateLobbyMatches(
   };
 }
 
-type ResultEntry = { registrationId: string; placement: number; kills: number };
+type ResultEntry = {
+  registrationId: string;
+  placement: number | null;
+  kills: number | null;
+  didNotPlay: boolean;
+};
 
 function readResultEntries(formData: FormData): ResultEntry[] | { error: string } {
   const raw = readField(formData, "results_json");
@@ -1158,20 +1164,27 @@ function readResultEntries(formData: FormData): ResultEntry[] | { error: string 
     const row = item as Record<string, unknown>;
     const registrationId =
       typeof row.registrationId === "string" ? row.registrationId : "";
-    const placement = Number(row.placement);
-    const kills = Number(row.kills);
+    const didNotPlay = row.did_not_play === true;
     if (!uuidPattern.test(registrationId)) {
       return { error: "One of the teams is invalid. Please re-check the list." };
     }
+    if (didNotPlay) {
+      entries.push({ registrationId, placement: null, kills: null, didNotPlay: true });
+      continue;
+    }
+    const placement = Number(row.placement);
+    const kills = Number(row.kills);
     if (!Number.isInteger(placement) || placement < 1) {
       return { error: "Placement must be a whole number of at least 1." };
     }
     if (!Number.isInteger(kills) || kills < 0) {
       return { error: "Kills must be a whole number of 0 or more." };
     }
-    entries.push({ registrationId, placement, kills });
+    entries.push({ registrationId, placement, kills, didNotPlay: false });
   }
-  const placements = entries.map((entry) => entry.placement);
+  const placements = entries
+    .filter((entry) => !entry.didNotPlay)
+    .map((entry) => entry.placement);
   if (new Set(placements).size !== placements.length) {
     return { error: "Two teams share the same placement. Fix the duplicates." };
   }
@@ -1199,6 +1212,7 @@ export async function saveMatchResults(
         registration_id: entry.registrationId,
         placement: entry.placement,
         kills: entry.kills,
+        did_not_play: entry.didNotPlay,
       })),
     },
   );
@@ -1416,11 +1430,12 @@ export async function getMatchResultDetails(
     registration_id: string;
     team_name: string;
     team_code: string;
-    placement: number;
-    kills: number;
-    placement_points: number;
-    kill_points: number;
-    total_points: number;
+    placement: number | null;
+    kills: number | null;
+    placement_points: number | null;
+    kill_points: number | null;
+    total_points: number | null;
+    did_not_play: boolean;
     status: string;
     players: Array<{
       id: string;
@@ -1443,6 +1458,7 @@ export async function getMatchResultDetails(
       placementPoints: row.placement_points,
       killPoints: row.kill_points,
       totalPoints: row.total_points,
+      didNotPlay: row.did_not_play === true,
       status: row.status === "final" ? "final" : "draft",
       players: (row.players ?? []).map((player) => ({
         id: player.id,
