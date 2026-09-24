@@ -152,19 +152,30 @@ const plusDays = n => new Date(Date.now() + n * 86400000);
     tournament.entry_fee_minor === 500 && tournament.currency === 'PKR',
     'entry_fee_minor=' + tournament.entry_fee_minor);
 
-  await rpc(admin.token, 'levelledup_admin_transition_tournament',
-    { p_tournament_id: tournament.id, p_action: 'open_registration' });
-
-  // --- 2. Stage + session, price 700 ---
-  console.log('\n[2] Creating stage + session, setting session price 700 PKR...');
+  // --- 2. Stage 1 configured (publish guard) + session priced at 700 ---
+  console.log('\n[2] Configuring Stage 1, creating session, opening registration...');
   const stage = await rpc(admin.token, 'levelledup_admin_create_tournament_stage', {
     p_tournament_id: tournament.id, p_stage_number: 1,
-    p_name_preset: 'Open Qualifier', p_custom_name: null, p_configuration: {},
+    p_name_preset: 'open_qualifier', p_custom_name: null, p_configuration: {},
   });
+  // Publish guard requires Stage 1 configuration_ready before open_registration.
+  // Paid tournaments require a positive stage fee template; mirror the 500
+  // tournament fee as the template so the E2E proves the session's 700 wins
+  // over BOTH the tournament fee and the stage template.
+  const configured = await rpc(admin.token, 'levelledup_admin_configure_stage', {
+    p_stage_id: stage.id,
+    p_patch: { matches_per_lobby: 3, stage_fee_minor: 500, fee_currency: 'PKR', advancement_count: 0 },
+  });
+  check('stage 1 configuration_ready (publish guard requirement)',
+    configured.configuration_ready === true, 'configuration_ready=' + configured.configuration_ready);
   const session = await rpc(admin.token, 'levelledup_admin_create_tournament_session', {
     p_stage_id: stage.id, p_display_name: 'TEST Paid Session 1',
     p_scheduled_start_at: iso(plusDays(9)), p_scheduled_end_at: iso(new Date(Date.now() + 9 * 86400000 + 3 * 3600000)),
   });
+
+  await rpc(admin.token, 'levelledup_admin_transition_tournament',
+    { p_tournament_id: tournament.id, p_action: 'open_registration' });
+  note('registration opened after Stage 1 configuration was complete');
   const priced = await rpc(admin.token, 'levelledup_admin_set_session_price', {
     p_session_id: session.id, p_entry_fee_minor: 700, p_fee_currency: 'PKR',
     p_reason: 'PAID E2E price-separation test: session attempt price must stay 700, distinct from 500 registration fee.',
@@ -194,7 +205,7 @@ const plusDays = n => new Date(Date.now() + n * 86400000);
   const memberIds = members.map(m => m.id);
 
   const reg = await rpc(captain.token, 'levelledup_register_team_for_tournament', {
-    p_tournament_id: tournament.id, p_team_id: team.id, p_roster_member_ids: memberIds,
+    p_tournament_id: tournament.id, p_team_id: team.id,
   });
   await rpc(captain.token, 'levelledup_select_registration_initial_session',
     { p_registration_id: reg.id, p_session_id: session.id });
