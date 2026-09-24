@@ -120,6 +120,10 @@ type SlotBoardDatabaseRow = {
 };
 type AdminLobbyDatabaseRow = {
   stage_id: string;
+  stage_number: number;
+  session_id: string;
+  session_number: number;
+  session_display_name: string;
   lobby_id: string;
   lobby_label: string;
   lobby_code: string;
@@ -440,6 +444,11 @@ export default async function AdminTournamentPage({
     order: lobby.lobby_order,
     capacity: lobby.lobby_capacity,
     status: lobby.lobby_status,
+    stageId: lobby.stage_id,
+    stageNumber: lobby.stage_number,
+    sessionId: lobby.session_id,
+    sessionNumber: lobby.session_number,
+    sessionDisplayName: lobby.session_display_name,
   }));
   const stages: AdminTournamentStage[] = (
     (stagesResult.data ?? []) as StageDatabaseRow[]
@@ -520,6 +529,14 @@ export default async function AdminTournamentPage({
       cancellationReason: entry.cancellation_reason,
     };
   });
+
+  const sessionTeamCounts: Record<string, number> = {};
+  for (const entry of (sessionEntriesResult.data ?? []) as SessionEntryDatabaseRow[]) {
+    if (entry.status === "active") {
+      sessionTeamCounts[entry.session_id] =
+        (sessionTeamCounts[entry.session_id] ?? 0) + 1;
+    }
+  }
 
   for (const member of (rosterResult.data ?? []) as RosterRow[]) {
     const registration = registrationRows.find(
@@ -836,6 +853,8 @@ export default async function AdminTournamentPage({
             lobbies={lobbies}
             maxLobbies={tournament.max_lobbies}
             registrations={registrations}
+            sessions={sessions}
+            sessionTeamCounts={sessionTeamCounts}
             slotBoardRows={slotBoardRows}
             tournamentPublicId={tournament.tournament_id}
           />

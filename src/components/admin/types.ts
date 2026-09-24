@@ -91,6 +91,11 @@ export type AdminTournamentLobby = {
   order: number;
   capacity: number;
   status: "planned" | "open" | "locked" | "completed" | "cancelled";
+  stageId: string;
+  stageNumber: number;
+  sessionId: string;
+  sessionNumber: number;
+  sessionDisplayName: string;
 };
 
 export type AdminTournamentStage = {

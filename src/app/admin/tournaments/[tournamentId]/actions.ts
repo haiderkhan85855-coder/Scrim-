@@ -258,6 +258,231 @@ export async function createTournamentLobby(
   return { success: `${lobby?.display_label ?? "Lobby"} created.` };
 }
 
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function readSessionLobbyFields(formData: FormData) {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const sessionId = readField(formData, "session_id");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." } as const;
+  }
+  if (!uuidPattern.test(sessionId)) {
+    return { error: "Select the session this lobby belongs to." } as const;
+  }
+  return { tournamentPublicId, sessionId } as const;
+}
+
+function readWholeNumber(formData: FormData, name: string) {
+  const submitted = readField(formData, name);
+  if (!/^\d+$/.test(submitted)) return null;
+  const value = Number(submitted);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
+export async function createSessionLobby(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readSessionLobbyFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const capacity = readWholeNumber(formData, "capacity");
+  if (capacity === null || capacity < 1 || capacity > 100) {
+    return { error: "Lobby capacity must be between 1 and 100." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_create_session_lobby",
+    { p_session_id: references.sessionId, p_capacity: capacity },
+  );
+
+  if (error) {
+    console.error("[Admin: create session lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  const lobby = data as { display_label?: string } | null;
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return { success: `${lobby?.display_label ?? "Lobby"} created.` };
+}
+
+export async function generateSessionLobbies(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const references = readSessionLobbyFields(formData);
+  if ("error" in references) return { error: references.error };
+
+  const teamsPerLobby = readWholeNumber(formData, "teams_per_lobby");
+  const lobbyCount = readWholeNumber(formData, "lobby_count");
+  if (
+    teamsPerLobby === null ||
+    teamsPerLobby < 1 ||
+    teamsPerLobby > 100 ||
+    lobbyCount === null ||
+    lobbyCount < 1 ||
+    lobbyCount > 26
+  ) {
+    return { error: "Enter teams per lobby (1-100) and lobby count (1-26)." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { data, error } = await supabase.rpc(
+    "levelledup_admin_generate_session_lobbies",
+    {
+      p_session_id: references.sessionId,
+      p_teams_per_lobby: teamsPerLobby,
+      p_lobby_count: lobbyCount,
+    },
+  );
+
+  if (error) {
+    console.error("[Admin: generate session lobbies]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  const created = Array.isArray(data) ? data.length : 0;
+  revalidatePath(`/admin/tournaments/${references.tournamentPublicId}`);
+  return {
+    success: `${created} ${created === 1 ? "lobby" : "lobbies"} created (${teamsPerLobby} teams each).`,
+  };
+}
+
+export async function renameTournamentLobby(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const lobbyId = readField(formData, "lobby_id");
+  const label = readField(formData, "label");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(lobbyId)) {
+    return { error: "Select a valid tournament lobby." };
+  }
+  if (label.length < 1 || label.length > 80) {
+    return { error: "Lobby name must be between 1 and 80 characters." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc(
+    "levelledup_admin_rename_tournament_lobby",
+    { p_lobby_id: lobbyId, p_label: label },
+  );
+
+  if (error) {
+    console.error("[Admin: rename tournament lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return { success: `Lobby renamed to "${label}".` };
+}
+
+export async function resizeTournamentLobby(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const lobbyId = readField(formData, "lobby_id");
+  const capacity = readWholeNumber(formData, "capacity");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(lobbyId)) {
+    return { error: "Select a valid tournament lobby." };
+  }
+  if (capacity === null || capacity < 1 || capacity > 100) {
+    return { error: "Lobby capacity must be between 1 and 100." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc(
+    "levelledup_admin_resize_tournament_lobby",
+    { p_lobby_id: lobbyId, p_capacity: capacity },
+  );
+
+  if (error) {
+    console.error("[Admin: resize tournament lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return { success: `Lobby capacity set to ${capacity}.` };
+}
+
+export async function deleteTournamentLobby(
+  _previousState: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const tournamentPublicId = readField(
+    formData,
+    "tournament_public_id",
+  ).toUpperCase();
+  const lobbyId = readField(formData, "lobby_id");
+
+  if (!/^LU-T-[A-HJ-NP-Z2-9]{8}$/.test(tournamentPublicId)) {
+    return { error: "Tournament reference is invalid." };
+  }
+  if (!uuidPattern.test(lobbyId)) {
+    return { error: "Select a valid tournament lobby." };
+  }
+
+  const supabase = await adminClient();
+  if (!supabase) return { error: "Admin authorization is required." };
+
+  const { error } = await supabase.rpc(
+    "levelledup_admin_delete_tournament_lobby",
+    { p_lobby_id: lobbyId },
+  );
+
+  if (error) {
+    console.error("[Admin: delete tournament lobby]", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: registrationError(error) };
+  }
+
+  revalidatePath(`/admin/tournaments/${tournamentPublicId}`);
+  return { success: "Lobby deleted." };
+}
+
 async function reviewPayment(
   formData: FormData,
   decision: "verify" | "reject",
