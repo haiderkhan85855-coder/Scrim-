@@ -163,7 +163,7 @@ alter table public.tournament_lobbies
 
 create function public.levelledup_validate_lobby_session_scope()
 returns trigger language plpgsql security definer set search_path = '' set row_security = off as $$
-declare selected_session public.tournament_stage_sessions; session_count integer;
+declare selected_session public.tournament_stage_sessions;
 begin
   if tg_op='UPDATE' and (new.id is distinct from old.id
     or new.tournament_id is distinct from old.tournament_id
@@ -174,13 +174,10 @@ begin
   if tg_op='DELETE' then
     raise exception 'Tournament Lobby history cannot be deleted.' using errcode='22023';
   end if;
+  -- A Lobby is always assigned to an explicitly chosen Session. The Session
+  -- (a day with its Matches) exists first; the backend never guesses it.
   if new.session_id is null then
-    select count(*)::integer,min(s.id) into session_count,new.session_id
-    from public.tournament_stage_sessions s
-    where s.stage_id=new.stage_id and s.tournament_id=new.tournament_id;
-    if session_count<>1 then
-      raise exception 'Choose the exact Tournament Session for this Lobby.' using errcode='22023';
-    end if;
+    raise exception 'Choose the exact Tournament Session for this Lobby.' using errcode='22023';
   end if;
   select s.* into selected_session from public.tournament_stage_sessions s
   where s.id=new.session_id and s.stage_id=new.stage_id and s.tournament_id=new.tournament_id for share;
