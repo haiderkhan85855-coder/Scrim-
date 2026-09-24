@@ -11,7 +11,16 @@
 -- Captain-only powers (unchanged): remove players, disband team, transfer
 -- Captaincy / appoint Captain (and appoint/demote Co-Captain).
 
--- 1. Data migration: Substitute and Member both become Player.
+-- 1. Drop the old role checks FIRST. The data migration below writes
+--    'player', which the old ('captain', 'member', 'substitute') checks
+--    reject -- updating before dropping aborts the migration on any database
+--    that already holds roster rows (e.g. live teams with members/substitutes).
+alter table public.team_roster_members
+  drop constraint if exists team_roster_members_role_valid;
+alter table public.tournament_registration_roster
+  drop constraint if exists tournament_registration_roster_role_valid;
+
+-- 2. Data migration: Substitute and Member both become Player.
 update public.team_roster_members
 set role = 'player'
 where role in ('member', 'substitute');
@@ -20,27 +29,27 @@ update public.tournament_registration_roster
 set role = 'player'
 where role in ('member', 'substitute');
 
--- 2. Role check constraints: Captain / Co-Captain / Player.
+-- 3. Role check constraints: Captain / Co-Captain / Player.
 alter table public.team_roster_members
-  drop constraint team_roster_members_role_valid;
+  drop constraint if exists team_roster_members_role_valid;
 alter table public.team_roster_members
   add constraint team_roster_members_role_valid check (
     role in ('captain', 'co_captain', 'player')
   );
 
 alter table public.tournament_registration_roster
-  drop constraint tournament_registration_roster_role_valid;
+  drop constraint if exists tournament_registration_roster_role_valid;
 alter table public.tournament_registration_roster
   add constraint tournament_registration_roster_role_valid check (
     role in ('captain', 'co_captain', 'player')
   );
 
--- 3. At most one active Co-Captain per team (mirrors the captain rule).
+-- 4. At most one active Co-Captain per team (mirrors the captain rule).
 create unique index if not exists team_roster_members_active_co_captain_unique
   on public.team_roster_members (team_id)
   where status = 'active' and role = 'co_captain';
 
--- 4. Manager helper: active Captain OR active Co-Captain.
+-- 5. Manager helper: active Captain OR active Co-Captain.
 create or replace function public.levelledup_is_team_manager(p_team_id uuid)
 returns boolean
 language sql
