@@ -1,15 +1,22 @@
 -- Pre-match lobby: temporary live chat + captain/co-captain ready check + timer.
 --
--- Rule implemented (Haider-approved 2026-09-24):
+-- Rules (Haider-approved 2026-09-24):
 --   * When an admin opens the pre-match lobby, participating teams get a
 --     temporary chat and a "mark team set" control.
 --   * Only the captain or co-captain of a participating team can mark their
---     own team set (toggleable until the match starts) and only they plus
---     admins can send chat messages.
+--     own team set (toggleable until the match starts). The mark exists only
+--     so the match can start sooner -- nobody has to wait out the 7 minutes
+--     once every team is set.
+--   * Any active squad member of a participating team can send chat messages
+--     (the captain/co-captain might not be playing). Anti-spam: at most
+--     2 messages per 30 seconds per sender; the UI shows the cooldown.
+--   * Each message is labelled "PlayerName from TeamName"
+--     (e.g. "Arrow from Eagle Warriors"); admin messages are labelled Admin.
+--   * The chat is temporary: players only ever see it while the lobby is
+--     open. Rows are retained for audit; admins can review a closed lobby's
+--     chat for disputes, players never can.
 --   * The match can start when every participating team is set, or when the
 --     lobby timer expires (see levelledup_admin_start_match).
---   * The chat is temporary: the UI only surfaces it while the lobby is open.
---     Rows are retained afterwards for audit, never shown.
 
 -- ---------------------------------------------------------------------------
 -- 1. Ready checks: one row per participating team per match.
@@ -63,7 +70,7 @@ revoke all on table public.match_lobby_messages
   from public, anon, authenticated;
 
 comment on table public.match_lobby_messages is
-  'Temporary pre-match lobby chat. Only surfaced while the lobby is open; rows are kept afterwards for audit. Senders are admins or captains/co-captains of participating teams.';
+  'Temporary pre-match lobby chat. Only surfaced while the lobby is open; rows are kept afterwards for audit. Senders are admins or active squad members of participating teams.';
 
 -- ---------------------------------------------------------------------------
 -- 3. Helper: the caller's participating registration for a match.
@@ -259,8 +266,10 @@ grant execute on function public.levelledup_unmark_team_set(uuid)
   to authenticated;
 
 -- ---------------------------------------------------------------------------
--- 5. Temporary lobby chat: send (admins + captains/co-captains of
+-- 5. Temporary lobby chat: send (admins + any active squad member of
 --    participating teams, only while the lobby is open).
+--    Anti-spam: at most 2 messages per 30 seconds per sender.
+--    Labels: "PlayerName from TeamName" for members, "Admin" for admins.
 -- ---------------------------------------------------------------------------
 create or replace function public.levelledup_send_lobby_message(
   p_match_id uuid,
@@ -277,9 +286,11 @@ declare
   selected_match public.tournament_matches;
   normalized_body text := nullif(btrim(coalesce(p_body, '')), '');
   is_admin boolean;
-  registration_id uuid;
   label text;
   team_id uuid;
+  recent_count integer;
+  oldest_recent timestamptz;
+  wait_secs integer;
   saved_message public.match_lobby_messages;
 begin
   if caller is null then
@@ -312,26 +323,47 @@ begin
       using errcode = '22023';
   end if;
 
+  -- Anti-spam: at most 2 messages per 30 seconds per sender in a lobby.
+  select count(*), min(m.created_at)
+  into recent_count, oldest_recent
+  from public.match_lobby_messages as m
+  where m.tournament_match_id = p_match_id
+    and m.sender_user_id = caller
+    and m.created_at > clock_timestamp() - interval '30 seconds';
+
+  if recent_count >= 2 then
+    wait_secs := 30
+      - floor(extract(epoch from (clock_timestamp() - oldest_recent)))::integer;
+    if wait_secs < 1 then
+      wait_secs := 1;
+    end if;
+    raise exception 'Slow down: 2 messages per 30 seconds. Try again in % seconds.', wait_secs
+      using errcode = '22023';
+  end if;
+
   is_admin := public.levelledup_has_admin_role('admin');
 
   if is_admin then
     label := 'Admin';
     team_id := null;
   else
-    registration_id := public.levelledup_lobby_caller_registration(
-      p_match_id, selected_match.tournament_id
-    );
-
-    if registration_id is null then
-      raise exception 'Only match admins and participating team captains can chat here.'
-        using errcode = '42501';
-    end if;
-
-    select t.id, t.name
+    select t.id, mb.display_name || ' from ' || t.name
     into team_id, label
     from public.tournament_registrations as r
     join public.teams as t on t.id = r.team_id
-    where r.id = registration_id;
+    join public.team_roster_members as mb on mb.team_id = r.team_id
+    where r.tournament_id = selected_match.tournament_id
+      and mb.profile_id = caller
+      and mb.status = 'active'
+      and r.id in (
+        select public.levelledup_match_active_team_ids(p_match_id)
+      )
+    limit 1;
+
+    if team_id is null then
+      raise exception 'Only match admins and participating team members can chat here.'
+        using errcode = '42501';
+    end if;
   end if;
 
   insert into public.match_lobby_messages (
@@ -357,7 +389,7 @@ grant execute on function public.levelledup_send_lobby_message(uuid, text)
   to authenticated;
 
 comment on function public.levelledup_send_lobby_message(uuid, text) is
-  'Sends a temporary pre-match lobby chat message. Admins and captains/co-captains of participating teams only, while the lobby is open.';
+  'Sends a temporary pre-match lobby chat message. Admins and any active squad member of a participating team, while the lobby is open. Max 2 messages per 30 seconds per sender.';
 
 -- ---------------------------------------------------------------------------
 -- 6. Read the lobby state: timer, teams + ready marks, recent messages.
@@ -496,8 +528,9 @@ comment on function public.levelledup_get_pre_match_lobby(uuid) is
   'Reads the pre-match lobby state: timer, participating teams with ready marks, and recent chat messages. Admins and active members of participating teams only.';
 
 -- ---------------------------------------------------------------------------
--- 7. My open lobbies: pre-match matches where the caller is captain or
---    co-captain of a participating team. Powers the captain's lobby list.
+-- 7. My open lobbies: pre-match matches where the caller is an active member
+--    of a participating team (any role -- anyone may need the chat, since the
+--    captain/co-captain might not be playing). Powers the lobby list.
 -- ---------------------------------------------------------------------------
 create or replace function public.levelledup_get_my_pre_match_lobbies()
 returns jsonb
@@ -540,7 +573,6 @@ begin
     on mb.team_id = r.team_id
   where m.status = 'pre_match'
     and mb.profile_id = caller
-    and mb.role in ('captain', 'co_captain')
     and mb.status = 'active'
     and r.id in (
       select public.levelledup_match_active_team_ids(m.id)
@@ -560,4 +592,72 @@ grant execute on function public.levelledup_get_my_pre_match_lobbies()
   to authenticated;
 
 comment on function public.levelledup_get_my_pre_match_lobbies() is
-  'Pre-match matches where the caller is captain/co-captain of a participating team. Powers the captain lobby list.';
+  'Pre-match matches where the caller is an active member of a participating team. Powers the lobby list.';
+
+-- ---------------------------------------------------------------------------
+-- 8. Admin review of a lobby's chat history, even after it closes.
+--    Dispute/abuse evidence: admins only, players never see past chats.
+-- ---------------------------------------------------------------------------
+create or replace function public.levelledup_admin_get_lobby_messages(
+  p_match_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $$
+declare
+  caller uuid := auth.uid();
+  result jsonb;
+begin
+  if caller is null then
+    raise exception 'Authentication is required.'
+      using errcode = '42501';
+  end if;
+
+  if p_match_id is null then
+    raise exception 'A match is required.'
+      using errcode = '22023';
+  end if;
+
+  if not public.levelledup_has_admin_role('admin') then
+    raise exception 'Admin access is required.'
+      using errcode = '42501';
+  end if;
+
+  if not exists (select 1 from public.tournament_matches where id = p_match_id) then
+    raise exception 'Match not found.'
+      using errcode = 'P4203';
+  end if;
+
+  select coalesce(jsonb_agg(
+    jsonb_build_object(
+      'id', m.id,
+      'sender_label', m.sender_label,
+      'sender_team_id', m.sender_team_id,
+      'body', m.body,
+      'created_at', m.created_at
+    )
+    order by m.created_at
+  ), '[]'::jsonb)
+  into result
+  from public.match_lobby_messages as m
+  where m.tournament_match_id = p_match_id;
+
+  return result;
+end;
+$$;
+
+alter function public.levelledup_admin_get_lobby_messages(uuid)
+  owner to postgres;
+
+revoke all on function public.levelledup_admin_get_lobby_messages(uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.levelledup_admin_get_lobby_messages(uuid)
+  to authenticated;
+
+comment on function public.levelledup_admin_get_lobby_messages(uuid) is
+  'Admin-only review of a match lobby chat history, available even after the lobby closes (dispute/abuse evidence).';
