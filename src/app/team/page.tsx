@@ -10,6 +10,7 @@ import {
   type TeamRosterMember,
 } from "@/components/team/TeamDashboard";
 import { TeamOnboarding } from "@/components/team/TeamOnboarding";
+import type { PendingDisbandRequest } from "@/components/team/TeamManagementControls";
 import type { TeamRecruitmentPost } from "@/components/team/TeamRecruitmentPanel";
 import { Button } from "@/components/ui/Button";
 import { AuthenticatedHeader } from "@/components/layout/AuthenticatedHeader";
@@ -148,6 +149,10 @@ export default async function TeamPage() {
   let pendingRequests: PendingJoinRequest[] = [];
   let recruitmentPosts: TeamRecruitmentPost[] = [];
   let cancelledTournaments: CancelledTournamentHistory[] = [];
+  let disbandRequests: {
+    teamId: string;
+    request: PendingDisbandRequest | null;
+  }[] = [];
 
   if (memberships.length > 0) {
     const membershipTeamIds = memberships.map(
@@ -187,6 +192,28 @@ export default async function TeamPage() {
         role: membership.role,
       };
     });
+
+    const disbandResults = await Promise.all(
+      membershipTeamIds.map(async (teamId) => {
+        const { data, error } = await supabase.rpc(
+          "levelledup_get_team_disband_request",
+          { p_team_id: teamId },
+        );
+        if (error) {
+          console.error("[Supabase Teams: disband request read]", {
+            code: error.code,
+            message: error.message,
+            userReference: user.id.slice(-6),
+          });
+          throw new Error("Unable to load disband request details.");
+        }
+        const payload = (data ?? {}) as {
+          request: PendingDisbandRequest | null;
+        };
+        return { teamId, request: payload.request };
+      }),
+    );
+    disbandRequests = disbandResults;
 
     const { data: rosterData, error: rosterError } = await supabase
       .from("team_roster_members")
@@ -367,6 +394,7 @@ export default async function TeamPage() {
             roster={roster}
             pendingRequests={pendingRequests}
             recruitmentPosts={recruitmentPosts}
+            disbandRequests={disbandRequests}
             canCreate={canCreateTeam}
           />
         ) : (

@@ -5,6 +5,8 @@ import { useActionState, useState } from "react";
 import {
   type TeamMutationActionState,
   approveJoinRequest,
+  approveTeamDisband,
+  cancelTeamDisband,
   changeRosterRole,
   disbandTeam,
   leaveTeam,
@@ -293,17 +295,62 @@ export function RosterMemberControls({
   );
 }
 
+export type PendingDisbandRequest = {
+  id: string;
+  expiresAt: string;
+  approvalCount: number;
+  approvalsNeeded: number;
+  callerApproved: boolean;
+  isCallerRequester: boolean;
+};
+
 export function TeamDisbandControls({
   teamId,
   permanentTeamId,
+  disbandRequest,
 }: {
   teamId: string;
   permanentTeamId: string;
+  disbandRequest: PendingDisbandRequest | null;
 }) {
   const [state, action, pending] = useActionState(disbandTeam, initialState);
+  const [cancelState, cancelAction, cancelPending] = useActionState(
+    cancelTeamDisband,
+    initialState,
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const matches = confirmation.trim().toUpperCase() === permanentTeamId;
+
+  if (disbandRequest) {
+    return (
+      <div className="rounded-[2px] border border-[#ff8a65]/40 bg-[#ff8a65]/[0.04] p-4">
+        <p className="text-sm font-medium text-foreground">
+          Disband requested
+        </p>
+        <p className="mt-2 text-xs leading-5 text-foreground-muted">
+          {disbandRequest.approvalCount} of {disbandRequest.approvalsNeeded}{" "}
+          Squad approvals received. The request expires{" "}
+          {new Date(disbandRequest.expiresAt).toLocaleString()}.
+        </p>
+        <p className="mt-2 text-xs leading-5 text-foreground-muted">
+          The team archives only after two Squad members approve. You can
+          cancel this request any time before then.
+        </p>
+        <form action={cancelAction} className="mt-4">
+          <input type="hidden" name="request_id" value={disbandRequest.id} />
+          <button
+            type="submit"
+            disabled={cancelPending}
+            className={`${controlButtonClasses} border-border-strong text-foreground-muted`}
+          >
+            {cancelPending ? "Cancelling..." : "Cancel Disband Request"}
+          </button>
+        </form>
+        <ActionFeedback states={[cancelState]} />
+      </div>
+    );
+  }
 
   if (!isOpen) {
     return (
@@ -319,9 +366,12 @@ export function TeamDisbandControls({
 
   return (
     <div className="rounded-[2px] border border-[#ff8a65]/40 bg-[#ff8a65]/[0.04] p-4">
-      <p className="text-sm font-medium text-foreground">Archive this team?</p>
+      <p className="text-sm font-medium text-foreground">
+        Request to archive this team?
+      </p>
       <p className="mt-2 text-xs leading-5 text-foreground-muted">
-        This deactivates every membership and cannot be undone here. Type
+        Disbanding is a request: two other Squad members must approve within 48
+        hours. Type
         <span className="mx-1 font-semibold text-[#ff8a65]">
           {permanentTeamId}
         </span>
@@ -350,7 +400,7 @@ export function TeamDisbandControls({
             disabled={!matches || pending}
             className={`${controlButtonClasses} border-[#ff8a65] bg-[#ff8a65] text-background`}
           >
-            {pending ? "Disbanding..." : "Confirm Disband"}
+            {pending ? "Requesting..." : "Request Disband"}
           </button>
           <button
             type="button"
@@ -365,6 +415,52 @@ export function TeamDisbandControls({
           </button>
         </div>
       </form>
+      <ActionFeedback states={[state]} />
+    </div>
+  );
+}
+
+export function DisbandApprovalBanner({
+  disbandRequest,
+}: {
+  disbandRequest: PendingDisbandRequest;
+}) {
+  const [state, action, pending] = useActionState(
+    approveTeamDisband,
+    initialState,
+  );
+
+  return (
+    <div
+      role="alert"
+      className="rounded-[2px] border border-[#ff8a65]/45 bg-[#ff8a65]/[0.06] p-4 sm:p-5"
+    >
+      <p className="text-sm font-medium text-foreground">
+        Disband requested by your captain
+      </p>
+      <p className="mt-2 text-xs leading-5 text-foreground-muted">
+        Your captain asked to archive this team. It takes two Squad member
+        approvals ({disbandRequest.approvalCount} of{" "}
+        {disbandRequest.approvalsNeeded} received) before the team archives.
+        The request expires{" "}
+        {new Date(disbandRequest.expiresAt).toLocaleString()}.
+      </p>
+      {disbandRequest.callerApproved ? (
+        <p className="mt-3 text-xs font-semibold text-[#79d49b]">
+          You have approved this request.
+        </p>
+      ) : (
+        <form action={action} className="mt-4">
+          <input type="hidden" name="request_id" value={disbandRequest.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            className={`${controlButtonClasses} border-[#ff8a65] bg-[#ff8a65] text-background`}
+          >
+            {pending ? "Approving..." : "Approve Disband"}
+          </button>
+        </form>
+      )}
       <ActionFeedback states={[state]} />
     </div>
   );

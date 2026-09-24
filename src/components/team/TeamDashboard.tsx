@@ -5,9 +5,11 @@ import { useState } from "react";
 
 import { CopyPubgUid } from "@/components/team/CopyPubgUid";
 import {
+  DisbandApprovalBanner,
   JoinRequestControls,
   RosterMemberControls,
   TeamDisbandControls,
+  type PendingDisbandRequest,
 } from "@/components/team/TeamManagementControls";
 import { TeamOnboarding } from "@/components/team/TeamOnboarding";
 import {
@@ -65,6 +67,7 @@ type TeamDashboardProps = {
   pendingRequests: PendingJoinRequest[];
   cancelledTournaments: CancelledTournamentHistory[];
   recruitmentPosts: TeamRecruitmentPost[];
+  disbandRequests: { teamId: string; request: PendingDisbandRequest | null }[];
   canCreate: boolean;
 };
 
@@ -92,6 +95,7 @@ export function TeamDashboard({
   pendingRequests,
   cancelledTournaments,
   recruitmentPosts,
+  disbandRequests,
   canCreate,
 }: TeamDashboardProps) {
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0].id);
@@ -108,6 +112,9 @@ export function TeamDashboard({
   );
   const selectedRecruitment =
     recruitmentPosts.find((post) => post.teamId === selectedTeam.id) ?? null;
+  const selectedDisbandRequest =
+    disbandRequests.find((entry) => entry.teamId === selectedTeam.id)?.request ??
+    null;
   const viewerIsCaptain = selectedTeam.role === "captain";
   const viewerIsManager =
     selectedTeam.role === "captain" || selectedTeam.role === "co_captain";
@@ -226,6 +233,16 @@ export function TeamDashboard({
                 {roleLabels[selectedTeam.role]}
               </dd>
             </div>
+
+            {selectedDisbandRequest &&
+            !viewerIsCaptain &&
+            !selectedDisbandRequest.isCallerRequester ? (
+              <div className="col-span-2">
+                <DisbandApprovalBanner
+                  disbandRequest={selectedDisbandRequest}
+                />
+              </div>
+            ) : null}
           </dl>
         </div>
       </section>
@@ -444,6 +461,7 @@ export function TeamDashboard({
                 <TeamDisbandControls
                   teamId={selectedTeam.id}
                   permanentTeamId={selectedTeam.teamId}
+                  disbandRequest={selectedDisbandRequest}
                 />
               </div>
             </section>

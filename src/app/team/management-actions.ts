@@ -63,6 +63,42 @@ async function callTeamRpc(
   return null;
 }
 
+async function callTeamRpcWithData<T>(
+  functionName: string,
+  parameters: Record<string, unknown>,
+): Promise<{ data: T } | { error: RpcFailure }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      error: {
+        code: "AUTH_REQUIRED",
+        message: "Your session has expired. Sign in again to continue.",
+      },
+    };
+  }
+
+  const { data, error } = await supabase.rpc(functionName, parameters);
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[Supabase Teams: ${functionName}]`, {
+        code: error.code,
+        message: error.message,
+        userReference: user.id.slice(-6),
+      });
+    }
+
+    return { error: { code: error.code, message: error.message } };
+  }
+
+  return { data: data as T };
+}
+
 function mutationErrorMessage(error: RpcFailure, fallback: string) {
   switch (error.code) {
     case "AUTH_REQUIRED":
@@ -91,6 +127,14 @@ function mutationErrorMessage(error: RpcFailure, fallback: string) {
       return "Create a recruitment post before changing its status.";
     case "P3032":
       return "Players in an active tournament Squad cannot leave the team. Ask the Captain to remove you.";
+    case "P3033":
+      return "A disband request is already pending for this team.";
+    case "P3034":
+      return "The disband request is no longer pending or has expired.";
+    case "P3035":
+      return "Only active Squad members other than the requesting captain can approve.";
+    case "P3036":
+      return "You have already approved this disband request.";
     case "42501":
       return "You do not have permission to perform this action.";
     default:
@@ -339,18 +383,64 @@ export async function disbandTeam(
   ).toUpperCase();
 
   if (!uuidPattern.test(teamId) || !confirmationTeamId) {
-    return { error: "Enter the permanent Team ID to confirm disbanding." };
+    return { error: "Enter the permanent Team ID to request disbanding." };
   }
 
-  const error = await callTeamRpc("levelledup_disband_team", {
+  const result = await callTeamRpcWithData<string>("levelledup_request_team_disband", {
     p_team_id: teamId,
     p_confirmation_team_id: confirmationTeamId,
   });
 
-  if (error) {
-    return { error: mutationErrorMessage(error, "The team could not be disbanded.") };
+  if ("error" in result) {
+    return { error: mutationErrorMessage(result.error, "The disband request could not be created.") };
   }
 
   revalidatePath("/team");
-  return { success: "Team disbanded and archived." };
+  return { success: "Disband requested. Two Squad members must approve within 48 hours." };
+}
+
+export async function approveTeamDisband(
+  _previousState: TeamMutationActionState,
+  formData: FormData,
+): Promise<TeamMutationActionState> {
+  const requestId = readField(formData, "request_id");
+
+  if (!uuidPattern.test(requestId)) {
+    return { error: "Invalid disband request." };
+  }
+
+  const result = await callTeamRpcWithData<boolean>("levelledup_approve_team_disband", {
+    p_request_id: requestId,
+  });
+
+  if ("error" in result) {
+    return { error: mutationErrorMessage(result.error, "The disband request could not be approved.") };
+  }
+
+  revalidatePath("/team");
+  return result.data
+    ? { success: "Approved. The team has been disbanded and archived." }
+    : { success: "Approval recorded. Waiting for one more Squad member." };
+}
+
+export async function cancelTeamDisband(
+  _previousState: TeamMutationActionState,
+  formData: FormData,
+): Promise<TeamMutationActionState> {
+  const requestId = readField(formData, "request_id");
+
+  if (!uuidPattern.test(requestId)) {
+    return { error: "Invalid disband request." };
+  }
+
+  const error = await callTeamRpc("levelledup_cancel_team_disband", {
+    p_request_id: requestId,
+  });
+
+  if (error) {
+    return { error: mutationErrorMessage(error, "The disband request could not be cancelled.") };
+  }
+
+  revalidatePath("/team");
+  return { success: "Disband request cancelled." };
 }
