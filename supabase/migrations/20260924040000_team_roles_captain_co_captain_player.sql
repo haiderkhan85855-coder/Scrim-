@@ -36,7 +36,7 @@ alter table public.tournament_registration_roster
   );
 
 -- 3. At most one active Co-Captain per team (mirrors the captain rule).
-create unique index team_roster_members_active_co_captain_unique
+create unique index if not exists team_roster_members_active_co_captain_unique
   on public.team_roster_members (team_id)
   where status = 'active' and role = 'co_captain';
 
@@ -243,7 +243,7 @@ $$;
 
 -- Co-Captain widened: levelledup_reject_team_join_request
 
-create function public.levelledup_reject_team_join_request(
+create or replace function public.levelledup_reject_team_join_request(
   p_request_id uuid
 )
 returns boolean
@@ -291,7 +291,7 @@ $$;
 
 -- Co-Captain widened: levelledup_get_pending_join_requests
 
-create function public.levelledup_get_pending_join_requests()
+create or replace function public.levelledup_get_pending_join_requests()
 returns table (
   request_id uuid,
   team_id uuid,
@@ -326,7 +326,7 @@ $$;
 
 -- Co-Captain widened: levelledup_save_team_recruitment
 
-create function public.levelledup_save_team_recruitment(
+create or replace function public.levelledup_save_team_recruitment(
   p_team_id uuid,
   p_mic_required boolean,
   p_captain_note text default null
@@ -388,7 +388,7 @@ $$;
 
 -- Co-Captain widened: levelledup_set_team_recruitment_status
 
-create function public.levelledup_set_team_recruitment_status(
+create or replace function public.levelledup_set_team_recruitment_status(
   p_team_id uuid,
   p_status text
 )
@@ -443,7 +443,7 @@ $$;
 
 -- Co-Captain widened: levelledup_register_team_for_tournament
 
-create function public.levelledup_register_team_for_tournament(
+create or replace function public.levelledup_register_team_for_tournament(
   p_tournament_id uuid,
   p_team_id uuid
 )
@@ -857,7 +857,7 @@ $$;
 
 -- Co-Captain widened: levelledup_select_registration_initial_session
 
-create function public.levelledup_select_registration_initial_session(
+create or replace function public.levelledup_select_registration_initial_session(
   p_registration_id uuid,
   p_session_id uuid
 )
@@ -939,7 +939,7 @@ $$;
 
 -- Captain-only role changes now target Player / Co-Captain.
 
-create function public.levelledup_set_team_member_role(
+create or replace function public.levelledup_set_team_member_role(
   p_roster_member_id uuid,
   p_role text
 )
@@ -994,7 +994,7 @@ $$;
 
 -- Transfer captaincy: role literals updated, still captain-only.
 
-create function public.levelledup_transfer_team_captaincy(
+create or replace function public.levelledup_transfer_team_captaincy(
   p_team_id uuid,
   p_target_roster_member_id uuid
 )
@@ -1070,6 +1070,7 @@ $$;
 -- 8a. Co-Captains can read their team join requests.
 drop policy if exists "Active captains can read their team join requests"
   on public.team_join_requests;
+drop policy if exists "Captains and Co-Captains can read their team join requests" on public.team_join_requests;
 create policy "Captains and Co-Captains can read their team join requests"
   on public.team_join_requests
   for select
@@ -1079,6 +1080,7 @@ create policy "Captains and Co-Captains can read their team join requests"
 -- 8b. Co-Captains can read their tournament payment history.
 drop policy if exists "Captains can read their tournament payment history"
   on public.tournament_registration_payments;
+drop policy if exists "Captains and Co-Captains can read their tournament payment history" on public.tournament_registration_payments;
 create policy "Captains and Co-Captains can read their tournament payment history"
   on public.tournament_registration_payments
   for select
@@ -1089,6 +1091,7 @@ create policy "Captains and Co-Captains can read their tournament payment histor
 -- adding unclaimed members is not a Co-Captain power).
 drop policy if exists "Captains can add unclaimed roster members"
   on public.team_roster_members;
+drop policy if exists "Captains can add unclaimed roster members" on public.team_roster_members;
 create policy "Captains can add unclaimed roster members"
   on public.team_roster_members
   for insert

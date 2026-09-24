@@ -14,7 +14,7 @@ begin;
 -- ---------------------------------------------------------------------------
 -- 1. Session-first lobby creation (session-scoped Lobby A/B/C codes)
 -- ---------------------------------------------------------------------------
-create function public.levelledup_admin_create_session_lobby(
+create or replace function public.levelledup_admin_create_session_lobby(
   p_session_id uuid,
   p_capacity integer default null
 )
@@ -108,7 +108,7 @@ comment on function public.levelledup_admin_create_session_lobby(uuid, integer) 
 -- 2. Bulk generation: N lobbies of K teams for one session
 --    (e.g. 24 teams, 8 per lobby -> 3 lobbies)
 -- ---------------------------------------------------------------------------
-create function public.levelledup_admin_generate_session_lobbies(
+create or replace function public.levelledup_admin_generate_session_lobbies(
   p_session_id uuid,
   p_teams_per_lobby integer,
   p_lobby_count integer
@@ -155,7 +155,7 @@ comment on function public.levelledup_admin_generate_session_lobbies(uuid, integ
 -- ---------------------------------------------------------------------------
 -- 3. Rename a lobby (label only; lobby_code identity is stable)
 -- ---------------------------------------------------------------------------
-create function public.levelledup_admin_rename_tournament_lobby(
+create or replace function public.levelledup_admin_rename_tournament_lobby(
   p_lobby_id uuid,
   p_label text
 )
@@ -198,7 +198,7 @@ grant execute on function public.levelledup_admin_rename_tournament_lobby(uuid, 
 -- ---------------------------------------------------------------------------
 -- 4. Resize a lobby (never below the highest occupied slot)
 -- ---------------------------------------------------------------------------
-create function public.levelledup_admin_resize_tournament_lobby(
+create or replace function public.levelledup_admin_resize_tournament_lobby(
   p_lobby_id uuid,
   p_capacity integer
 )
@@ -224,7 +224,7 @@ begin
   where lobby_id = p_lobby_id and status = 'assigned';
 
   if p_capacity < highest_slot then
-    raise exception 'Lobby cannot shrink below slot %: teams are assigned there.'
+    raise exception 'Lobby cannot shrink below slot %: teams are assigned there.', highest_slot
       using errcode = 'P4412';
   end if;
 
@@ -295,7 +295,7 @@ begin
 end;
 $$;
 
-create function public.levelledup_admin_delete_tournament_lobby(
+create or replace function public.levelledup_admin_delete_tournament_lobby(
   p_lobby_id uuid
 )
 returns boolean
@@ -346,7 +346,7 @@ comment on function public.levelledup_admin_delete_tournament_lobby(uuid) is
 -- ---------------------------------------------------------------------------
 drop function public.levelledup_admin_get_tournament_lobbies(text);
 
-create function public.levelledup_admin_get_tournament_lobbies(
+create or replace function public.levelledup_admin_get_tournament_lobbies(
   p_tournament_code text
 )
 returns table (

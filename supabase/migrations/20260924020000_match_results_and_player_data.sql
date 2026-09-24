@@ -16,7 +16,7 @@
 -- 1. Wrong-lobby guard on match_results
 -- ---------------------------------------------------------------------------
 
-create function public.levelledup_validate_match_result_lobby()
+create or replace function public.levelledup_validate_match_result_lobby()
 returns trigger
 language plpgsql
 security definer
@@ -59,6 +59,7 @@ alter function public.levelledup_validate_match_result_lobby()
 revoke all on function public.levelledup_validate_match_result_lobby()
   from public, anon, authenticated;
 
+drop trigger if exists match_results_validate_lobby on public.match_results;
 create trigger match_results_validate_lobby
 before insert or update of tournament_match_id, tournament_registration_id
 on public.match_results
@@ -72,7 +73,7 @@ comment on function public.levelledup_validate_match_result_lobby() is
 -- 2. Generate a lobby's matches from the session/lobby match configuration
 -- ---------------------------------------------------------------------------
 
-create function public.levelledup_admin_generate_lobby_matches(
+create or replace function public.levelledup_admin_generate_lobby_matches(
   p_lobby_id uuid,
   p_map_rotation text[] default null
 )
@@ -137,8 +138,8 @@ begin
     selected_tournament.matches_per_day::bigint * selected_tournament.number_of_days::bigint;
 
   if match_count::bigint > configured_match_count then
-    raise exception 'This lobby needs % matches but the tournament is configured for % (matches/day x days). Raise the tournament match configuration first.'
-      using errcode = 'P4103', match_count, configured_match_count;
+    raise exception 'This lobby needs % matches but the tournament is configured for % (matches/day x days). Raise the tournament match configuration first.', match_count, configured_match_count
+      using errcode = 'P4103';
   end if;
 
   if p_map_rotation is not null then
@@ -209,7 +210,7 @@ comment on function public.levelledup_admin_generate_lobby_matches(uuid, text[])
 -- 3. Per-player result rows (fix 4)
 -- ---------------------------------------------------------------------------
 
-create table public.match_player_results (
+create table if not exists public.match_player_results (
   id uuid primary key default gen_random_uuid(),
   match_result_id uuid not null
     references public.match_results (id) on delete cascade,
@@ -233,20 +234,20 @@ create table public.match_player_results (
 comment on table public.match_player_results is
   'Per-player rows for one team match result. Optional: a result with no player rows is "players pending".';
 
-create unique index match_player_results_profile_unique_idx
+create unique index if not exists match_player_results_profile_unique_idx
   on public.match_player_results (match_result_id, profile_id)
   where profile_id is not null;
 
-create unique index match_player_results_uid_unique_idx
+create unique index if not exists match_player_results_uid_unique_idx
   on public.match_player_results (match_result_id, pubg_uid)
   where pubg_uid is not null;
 
-create index match_player_results_result_idx
+create index if not exists match_player_results_result_idx
   on public.match_player_results (match_result_id);
 
 alter table public.match_player_results enable row level security;
 
-create function public.levelledup_set_match_player_result_updated_at()
+create or replace function public.levelledup_set_match_player_result_updated_at()
 returns trigger
 language plpgsql
 security invoker
@@ -264,6 +265,7 @@ alter function public.levelledup_set_match_player_result_updated_at()
 revoke all on function public.levelledup_set_match_player_result_updated_at()
   from public, anon, authenticated;
 
+drop trigger if exists match_player_results_set_updated_at on None;
 create trigger match_player_results_set_updated_at
 before update on public.match_player_results
 for each row
@@ -275,7 +277,7 @@ execute function public.levelledup_set_match_player_result_updated_at();
 
 -- Batch upsert of draft team results for one match.
 -- p_results: [{registration_id, placement, kills}, ...]
-create function public.levelledup_admin_upsert_match_results(
+create or replace function public.levelledup_admin_upsert_match_results(
   p_match_id uuid,
   p_results jsonb
 )
@@ -317,12 +319,12 @@ begin
     if placement is null or placement < 1 then
       raise exception 'Placement must be at least 1.'
         using errcode = '22023';
-    end;
+    end if;
 
     if kills is null or kills < 0 then
       raise exception 'Kills cannot be negative.'
         using errcode = '22023';
-    end;
+    end if;
 
     perform public.levelledup_upsert_match_result(
       p_match_id,
@@ -348,7 +350,7 @@ grant execute on function public.levelledup_admin_upsert_match_results(uuid, jso
 
 -- Replace the player rows for one team result. Empty array clears them.
 -- p_players: [{profile_id?, player_name, pubg_uid?, kills, damage_dealt?}, ...]
-create function public.levelledup_admin_upsert_match_player_results(
+create or replace function public.levelledup_admin_upsert_match_player_results(
   p_match_result_id uuid,
   p_players jsonb
 )
@@ -400,7 +402,7 @@ begin
     if player_name is null or char_length(player_name) = 0 then
       raise exception 'Each player needs a name.'
         using errcode = '22023';
-    end;
+    end if;
 
     begin
       profile_id := nullif(entry ->> 'profile_id', '')::uuid;
@@ -420,7 +422,7 @@ begin
     if kills < 0 or damage_dealt < 0 then
       raise exception 'Kills and damage cannot be negative.'
         using errcode = '22023';
-    end;
+    end if;
 
     insert into public.match_player_results (
       match_result_id,
@@ -458,7 +460,7 @@ grant execute on function public.levelledup_admin_upsert_match_player_results(uu
   to authenticated;
 
 -- Admin finalize wrapper (adds the admin check to the existing finalizer).
-create function public.levelledup_admin_finalize_match_result(
+create or replace function public.levelledup_admin_finalize_match_result(
   p_match_result_id uuid
 )
 returns public.match_results
@@ -487,7 +489,7 @@ grant execute on function public.levelledup_admin_finalize_match_result(uuid)
   to authenticated;
 
 -- Mark a match completed. The existing guard refuses while draft results remain.
-create function public.levelledup_admin_complete_match(
+create or replace function public.levelledup_admin_complete_match(
   p_match_id uuid
 )
 returns public.tournament_matches
@@ -536,7 +538,7 @@ grant execute on function public.levelledup_admin_complete_match(uuid)
 -- ---------------------------------------------------------------------------
 
 -- All matches of a tournament (for the admin result-entry board).
-create function public.levelledup_admin_get_tournament_matches(
+create or replace function public.levelledup_admin_get_tournament_matches(
   p_tournament_id uuid
 )
 returns table (
@@ -599,7 +601,7 @@ grant execute on function public.levelledup_admin_get_tournament_matches(uuid)
   to authenticated;
 
 -- Matches of one lobby with result/player coverage counts.
-create function public.levelledup_admin_get_lobby_matches(
+create or replace function public.levelledup_admin_get_lobby_matches(
   p_lobby_id uuid
 )
 returns table (
@@ -660,7 +662,7 @@ grant execute on function public.levelledup_admin_get_lobby_matches(uuid)
   to authenticated;
 
 -- Team results of one match with their player rows as JSON.
-create function public.levelledup_admin_get_match_results(
+create or replace function public.levelledup_admin_get_match_results(
   p_match_id uuid
 )
 returns table (
@@ -734,7 +736,7 @@ grant execute on function public.levelledup_admin_get_match_results(uuid)
   to authenticated;
 
 -- Tournament-wide pending player-data count for the pending tasks bar.
-create function public.levelledup_admin_get_pending_player_results(
+create or replace function public.levelledup_admin_get_pending_player_results(
   p_tournament_id uuid
 )
 returns table (

@@ -275,13 +275,15 @@ set search_path = ''
 as $$
 declare
   has_credentials boolean;
+  already_published boolean := false;
   updated_count integer := 0;
   notified integer := 0;
 begin
   perform public.levelledup_require_admin('admin');
 
-  select m.room_id is not null and m.room_password is not null
-  into has_credentials
+  select m.room_id is not null and m.room_password is not null,
+         m.room_published_at is not null
+  into has_credentials, already_published
   from public.tournament_matches as m
   where m.id = p_match_id;
   if not found then
@@ -304,7 +306,7 @@ begin
       using errcode = 'P0002';
   end if;
 
-  notified := public._levelledup_notify_room_live(p_match_id, false);
+  notified := public._levelledup_notify_room_live(p_match_id, coalesce(already_published, false));
   return notified;
 end;
 $$;

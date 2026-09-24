@@ -440,8 +440,8 @@ begin
     event_reason := 'Force-started by admin: ' || normalized_reason;
   else
     if set_count < team_total and clock_timestamp() < timer_expires_at then
-      raise exception 'Cannot start yet: % of % teams are set and the lobby timer is still running.'
-        using errcode = '22023', set_count, team_total;
+      raise exception 'Cannot start yet: % of % teams are set and the lobby timer is still running.', set_count, team_total
+        using errcode = '22023';
     end if;
     if set_count >= team_total then
       event_reason := 'All ' || team_total || ' teams marked set.';
@@ -561,8 +561,8 @@ begin
   );
 
   if missing_count > 0 then
-    raise exception 'Cannot complete: % of % teams still have no result (or DNP) recorded.'
-      using errcode = '22023', missing_count, team_total;
+    raise exception 'Cannot complete: % of % teams still have no result (or DNP) recorded.', missing_count, team_total
+      using errcode = '22023';
   end if;
 
   select count(*)
@@ -572,8 +572,8 @@ begin
     and r.status <> 'final';
 
   if draft_count > 0 then
-    raise exception 'Cannot complete: % result(s) are still drafts. Finalize every result first.'
-      using errcode = '22023', draft_count;
+    raise exception 'Cannot complete: % result(s) are still drafts. Finalize every result first.', draft_count
+      using errcode = '22023';
   end if;
 
   update public.tournament_matches

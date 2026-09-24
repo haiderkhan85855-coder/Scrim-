@@ -204,7 +204,7 @@ declare
   caller uuid := auth.uid();
   selected_match public.tournament_matches;
   registration_id uuid;
-  removed boolean := false;
+  removed integer := 0;
 begin
   if caller is null then
     raise exception 'Authentication is required.'

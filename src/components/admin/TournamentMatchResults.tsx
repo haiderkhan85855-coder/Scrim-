@@ -502,8 +502,12 @@ export function TournamentMatchResults({
                           </button>
                         </form>
                       ) : null}
-                      {canManage && selectedMatch.status === "live" ? (
+                      {canManage &&
+                      (selectedMatch.status === "scheduled" ||
+                        selectedMatch.status === "pre_match" ||
+                        selectedMatch.status === "live") ? (
                         <>
+                          {selectedMatch.status === "live" ? (
                           <form action={completeAction}>
                             <input
                               type="hidden"
@@ -522,6 +526,7 @@ export function TournamentMatchResults({
                               Complete match
                             </button>
                           </form>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() =>
@@ -550,7 +555,9 @@ export function TournamentMatchResults({
                   <ActionMessage state={completeState} />
                   {showCancelForm &&
                   canManage &&
-                  selectedMatch.status === "live" ? (
+                  (selectedMatch.status === "scheduled" ||
+                    selectedMatch.status === "pre_match" ||
+                    selectedMatch.status === "live") ? (
                     <form
                       action={cancelAction}
                       className="border-b border-border-strong p-4 sm:p-5"
@@ -649,9 +656,7 @@ export function TournamentMatchResults({
                     </p>
                   ) : (
                     <>
-                      {canManage &&
-                      selectedMatch.status !== "completed" &&
-                      selectedMatch.status !== "cancelled" ? (
+                      {canManage && selectedMatch.status === "live" ? (
                         <form
                           action={saveAction}
                           className="border-b border-border-strong p-4 sm:p-5"
