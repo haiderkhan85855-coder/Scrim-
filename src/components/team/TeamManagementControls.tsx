@@ -190,8 +190,8 @@ export function RosterMemberControls({
             aria-label="Squad role"
             className="min-h-9 rounded-[2px] border border-border-strong bg-background px-3 text-xs text-foreground outline-none focus:border-accent"
           >
-            <option value="member">Player</option>
-            <option value="substitute">Substitute</option>
+            <option value="player">Player</option>
+            <option value="co_captain">Co-Captain</option>
           </select>
           <button
             type="submit"

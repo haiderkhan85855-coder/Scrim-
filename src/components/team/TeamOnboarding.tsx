@@ -26,7 +26,7 @@ export function TeamOnboarding({
           Maximum of 3 teams reached
         </p>
         <p className="mt-2 text-sm leading-6 text-foreground-muted">
-          Leave an existing Player or Substitute membership before joining or
+          Leave an existing team membership before joining or
           creating another team.
         </p>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">

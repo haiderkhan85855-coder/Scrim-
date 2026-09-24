@@ -84,7 +84,7 @@ function mutationErrorMessage(error: RpcFailure, fallback: string) {
     case "P3020":
       return "This team is no longer active.";
     case "P3021":
-      return "Captaincy can only be transferred to an active claimed Player or Substitute.";
+      return "Captaincy can only be transferred to an active claimed Player or Co-Captain.";
     case "P3022":
       return "The Team ID confirmation does not match.";
     case "P3031":
@@ -185,7 +185,7 @@ export async function approveJoinRequest(
 
   const error = await callTeamRpc(
     "levelledup_approve_team_join_request",
-    { p_request_id: requestId, p_role: "member" },
+    { p_request_id: requestId, p_role: "player" },
   );
 
   if (error) {
@@ -234,8 +234,8 @@ export async function changeRosterRole(
     return { error: "Invalid Squad member." };
   }
 
-  if (role !== "member" && role !== "substitute") {
-    return { error: "Role must be Player or Substitute." };
+  if (role !== "player" && role !== "co_captain") {
+    return { error: "Role must be Player or Co-Captain." };
   }
 
   const error = await callTeamRpc("levelledup_set_team_member_role", {

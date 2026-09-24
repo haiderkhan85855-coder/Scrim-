@@ -20,7 +20,7 @@ export type RegistrationTeam = {
   name: string;
   teamId: string;
   shortName: string | null;
-  role: "captain" | "member" | "substitute";
+  role: "captain" | "co_captain" | "player";
 };
 
 export type RegistrationRosterMember = {
@@ -91,8 +91,8 @@ type Props = {
 const initialState: RegistrationFlowActionState = {};
 const roleLabels = {
   captain: "Captain",
-  member: "Player",
-  substitute: "Substitute",
+  player: "Player",
+  co_captain: "Co-Captain",
 } as const;
 
 function Feedback({ state }: { state: RegistrationFlowActionState }) {
@@ -170,13 +170,15 @@ export function TournamentRegistrationFlow({
     [rosterMembers, selectedTeamId],
   );
   const isCaptain = selectedTeam?.role === "captain";
+  const isManager =
+    selectedTeam?.role === "captain" || selectedTeam?.role === "co_captain";
   const canSelectInitialSession = Boolean(
-    isCaptain && registration?.status === "pending" && !registration.payments.length
+    isManager && registration?.status === "pending" && !registration.payments.length
       && !tournamentCancelled,
   );
   const countValid = selectedRosterIds.length >= rosterMinPlayers && selectedRosterIds.length <= rosterMaxPlayers;
   const canFinalize = Boolean(
-    isCaptain && registration && ["pending", "confirmed"].includes(registration.status)
+    isManager && registration && ["pending", "confirmed"].includes(registration.status)
       && ["draft", "finalized"].includes(registration.rosterStatus)
       && !rosterLockPassed && !tournamentCancelled,
   );
@@ -246,7 +248,7 @@ export function TournamentRegistrationFlow({
             <Button href="/team" variant="secondary" className="mt-4">Go to My Team</Button>
           </div>
         )}
-        {selectedTeam && isCaptain && !registration ? (
+        {selectedTeam && isManager && !registration ? (
           <form action={beginAction} className="mt-5">
             <input type="hidden" name="team_id" value={selectedTeam.id} />
             <input type="hidden" name="tournament_public_id" value={tournamentPublicId} />
@@ -273,7 +275,7 @@ export function TournamentRegistrationFlow({
               <span className="border border-accent/30 px-3 py-2 text-accent">Registration {registration.status}</span>
               <span className="border border-border-strong px-3 py-2 text-foreground-muted">Squad {registration.rosterStatus}</span>
             </div>
-            {isCaptain && !tournamentCancelled ? (
+            {isManager && !tournamentCancelled ? (
               <div className="mt-5 border border-[#ff8a65]/30 bg-[#ff8a65]/[0.025] p-4">
                 <p className="text-[0.54rem] font-semibold uppercase tracking-[0.14em] text-[#ff8a65]">
                   Withdraw team
@@ -486,7 +488,7 @@ export function TournamentRegistrationFlow({
                   {registration.status === "pending" ? "Awaiting tournament approval. " : "Tournament entry confirmed. "}
                   This submitted Squad revision is an immutable tournament snapshot.
                 </p>
-                {!rosterLockPassed && !tournamentCancelled && registration.rosterStatus === "finalized" && isCaptain ? (
+                {!rosterLockPassed && !tournamentCancelled && registration.rosterStatus === "finalized" && isManager ? (
                   <button type="button" onClick={() => {
                     const activeMemberIds = new Set(availableRoster.map((member) => member.id));
                     setSelectedRosterIds(registration.snapshot

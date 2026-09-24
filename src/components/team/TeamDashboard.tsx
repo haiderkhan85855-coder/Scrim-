@@ -16,7 +16,7 @@ import {
 } from "@/components/team/TeamRecruitmentPanel";
 import { Button } from "@/components/ui/Button";
 
-export type TeamRole = "captain" | "member" | "substitute";
+export type TeamRole = "captain" | "co_captain" | "player";
 
 export type TeamMembership = {
   id: string;
@@ -70,8 +70,8 @@ type TeamDashboardProps = {
 
 const roleLabels: Record<TeamRole, string> = {
   captain: "Captain",
-  member: "Player",
-  substitute: "Substitute",
+  co_captain: "Co-Captain",
+  player: "Player",
 };
 
 function teamMark(team: TeamMembership) {
@@ -109,6 +109,8 @@ export function TeamDashboard({
   const selectedRecruitment =
     recruitmentPosts.find((post) => post.teamId === selectedTeam.id) ?? null;
   const viewerIsCaptain = selectedTeam.role === "captain";
+  const viewerIsManager =
+    selectedTeam.role === "captain" || selectedTeam.role === "co_captain";
   const teamLimitReached = teams.length >= 3;
 
   return (
@@ -352,11 +354,11 @@ export function TeamDashboard({
           <TeamRecruitmentPanel
             key={selectedTeam.id}
             teamId={selectedTeam.id}
-            isCaptain={viewerIsCaptain}
+            isCaptain={viewerIsManager}
             post={selectedRecruitment}
           />
 
-          {viewerIsCaptain ? (
+          {viewerIsManager ? (
             <section className="rounded-[2px] border border-border-strong bg-background-elevated/65 p-5 sm:p-7">
               <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
                 <div>

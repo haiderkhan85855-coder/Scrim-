@@ -220,8 +220,8 @@ export default async function TeamPage() {
       .sort((left, right) => {
         const roleOrder: Record<TeamRole, number> = {
           captain: 0,
-          member: 1,
-          substitute: 2,
+          co_captain: 1,
+          player: 2,
         };
 
         return roleOrder[left.role] - roleOrder[right.role];

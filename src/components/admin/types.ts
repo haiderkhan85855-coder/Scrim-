@@ -15,7 +15,7 @@ export type TournamentRegistrationStatus =
   | "rejected"
   | "withdrawn";
 export type TournamentRosterStatus = "draft" | "finalized" | "locked";
-export type TournamentRosterRole = "captain" | "member" | "substitute";
+export type TournamentRosterRole = "captain" | "co_captain" | "player";
 export type TournamentPaymentStatus = "pending" | "verified" | "rejected";
 export type TournamentCreditStatus = "available" | "used" | "refunded";
 

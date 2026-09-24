@@ -34,8 +34,8 @@ const statusLabels: Record<TournamentRegistrationStatus, string> = {
 
 const roleLabels: Record<TournamentRosterRole, string> = {
   captain: "Captain",
-  member: "Player",
-  substitute: "Substitute",
+  co_captain: "Co-Captain",
+  player: "Player",
 };
 
 const rosterStatusLabels = {
