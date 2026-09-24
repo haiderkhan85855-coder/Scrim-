@@ -19,7 +19,7 @@ create table if not exists public.match_ready_checks (
   tournament_id uuid not null references public.tournaments(id) on delete restrict,
   tournament_match_id uuid not null references public.tournament_matches(id) on delete cascade,
   tournament_registration_id uuid not null references public.tournament_registrations(id) on delete cascade,
-  marked_by uuid not null references auth.users(id) on delete set null,
+  marked_by uuid references auth.users(id) on delete set null,
   marked_at timestamptz not null default clock_timestamp(),
   constraint match_ready_checks_one_mark_per_team unique (
     tournament_match_id, tournament_registration_id
@@ -44,7 +44,7 @@ create table if not exists public.match_lobby_messages (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references public.tournaments(id) on delete restrict,
   tournament_match_id uuid not null references public.tournament_matches(id) on delete cascade,
-  sender_user_id uuid not null references auth.users(id) on delete set null,
+  sender_user_id uuid references auth.users(id) on delete set null,
   sender_team_id uuid references public.teams(id) on delete set null,
   sender_label text not null,
   body text not null,
