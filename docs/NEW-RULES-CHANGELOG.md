@@ -157,3 +157,15 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
   on every active entry session change ("Your entry for [Tournament] was
   moved from Session 2 to Session 3. Reason: ..."). Direct table writes are
   refused; only the trigger inserts.
+
+### Session entry lock corrections (built: `20260924150000`, pushed)
+- Moves are **later-session-only**: an entry mark may slide forward to a
+  later session of the same stage, never backwards (session numbers compared).
+- **Late registration approval**: stages stay open after tournament start —
+  review no longer refuses approval once `scheduled_start_at` passes. A live
+  tournament accepts approvals; only completed/cancelled/draft refuse.
+- Approval session override now runs the **same room check** as the move RPC
+  (P4005 when the target session's lobbies are full).
+- **Consumed = the moment the team's match goes live** (lead decision): an
+  assigned team with a live/completed match in the entry's session is
+  consumed even if no result is recorded yet. Never movable, never credited.
