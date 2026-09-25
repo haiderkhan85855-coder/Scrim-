@@ -169,3 +169,25 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
 - **Consumed = the moment the team's match goes live** (lead decision): an
   assigned team with a live/completed match in the entry's session is
   consumed even if no result is recorded yet. Never movable, never credited.
+
+## 2026-09-25
+
+### Qualification (built: `20260924160000`, pushed, awaiting Haider's SQL run)
+- **Both automatic and manual.** Results finalize -> the system marks the top
+  teams by itself; Haider can also mark/unmark by hand when the machine got it
+  wrong (machine error needs a human fix).
+- **The number is set per stage at tournament creation.** E.g. "top 7 qualify".
+  One number per stage, true for every session of that stage.
+- **Top N per lobby, per session.** If an already-qualified team lands in the
+  top N again, they do NOT take a slot: the slot slides down to the next team
+  (team #8 in the top-7 example). The already-qualified team gets an "already
+  qualified" message; the promoted team gets the "you qualified" message.
+- **Ties at the cutoff all qualify.** 7th and 8th on equal points -> both go.
+  Three teams tied -> all three go. Damage-based tiebreak comes later, not now.
+- **One team = one active qualification per stage.** Qualifying twice never
+  creates a second free entry.
+- **Qualification pings the notification inbox.** Every player on a qualifying
+  team is notified; so is a team that placed high again while already
+  qualified, and a team whose qualification is corrected.
+- **The next-entry card:** qualified -> next stage, first session, FREE, plus
+  the option to replay the qualified stage (paid). Not qualified -> paid retry.
