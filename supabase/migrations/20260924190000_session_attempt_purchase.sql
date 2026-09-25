@@ -1223,11 +1223,19 @@ $$;
 -- The submit RPC converts a unique-violation on the normalized manual
 -- reference into a clean captain-facing error; that handler is dead code
 -- without a backing constraint. One bank/EasyPaisa transaction reference may
--- back exactly one payment row, across registration and session-attempt
--- payments alike. Rejected payments keep their reference reserved so a
--- transaction cannot be recycled into a second payment.
+-- back exactly one live (pending or verified) payment row, across
+-- registration and session-attempt payments alike.
+-- This matches the standing rule from migration 20260830020000
+-- (levelledup_guard_manual_payment_reference): rejected attempts remain
+-- preserved as history and never reserve a reference, so a team whose
+-- payment was rejected for a fixable reason (e.g. a blurry screenshot) may
+-- resubmit the same genuine receipt with better proof.
+-- The drop-first pattern keeps re-runs safe if an earlier revision of this
+-- file ever created the index without the status predicate.
 -- ============================================================================
-create unique index if not exists tournament_registration_payments_manual_reference_unique_idx
+drop index if exists public.tournament_registration_payments_manual_reference_unique_idx;
+create unique index tournament_registration_payments_manual_reference_unique_idx
   on public.tournament_registration_payments (manual_reference_normalized)
   where payment_method = 'manual'
-    and manual_reference_normalized is not null;
+    and manual_reference_normalized is not null
+    and status in ('pending', 'verified');
