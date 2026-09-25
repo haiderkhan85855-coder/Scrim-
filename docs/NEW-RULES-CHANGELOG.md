@@ -191,3 +191,30 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
   qualified, and a team whose qualification is corrected.
 - **The next-entry card:** qualified -> next stage, first session, FREE, plus
   the option to replay the qualified stage (paid). Not qualified -> paid retry.
+
+### Permanent cancellation / credit / kill switch (built: `20260924170000`, pushed, awaiting Haider's SQL run)
+- **OVERRIDE of the earlier "credit to payer's profile" call:** on permanent
+  cancellation the money now goes back to the TEAM (team credit), not to
+  individual profiles. A player who leaves the team gets their own money back
+  automatically, no admin approval (their right). Cash-out stays a withdrawal
+  request via EasyPaisa. Exact leave-refund math is parked for 200000.
+- **Two kinds of death.** Cancel & Recreate (rebuild): no credit is paid out;
+  teams migrate and money stays in play as team credit in the new tournament.
+  Permanent cancellation (no continuation): unused paid entries become team
+  credit; played-and-failed and played-and-won entries are consumed, nothing
+  back; free/earned entries just end.
+- **Mid-tournament cancellation is now allowed.** The old database refused to
+  cancel once begun; now it cancels at any point before completion and only
+  credits what was never used. Consumed entries stay as history.
+- **"Unused" = the team's match never went live** (same 150000 consumed rule).
+- **Kill switch = permanent cancellation, super admin (Haider) only**, four
+  UI steps (confirm -> type tournament ID -> confirm -> captcha-style check);
+  the database re-verifies the typed ID. Cancelled is terminal: a cancelled
+  tournament can never be reopened.
+- **Matches cannot be cancelled anymore** (the old cancel RPC now refuses).
+  A broken match is RECREATED: fresh match in the same lobby, teams shift
+  automatically, every lobby player is notified with Haider's own message.
+- **Pause button added.** While paused, registrations, payments, lobbies,
+  match changes and new entries are frozen (P4408). Haider writes the reason
+  each time (generic default provided); every team is notified on pause and
+  on resume.
