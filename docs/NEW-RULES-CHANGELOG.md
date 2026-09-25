@@ -218,3 +218,21 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
   match changes and new entries are frozen (P4408). Haider writes the reason
   each time (generic default provided); every team is notified on pause and
   on resume.
+
+## 2026-09-25 — Mandatory payment screenshots (180000)
+
+Haider's words and decisions:
+
+- "It's not just EasyPaisa, like they can pay with anyone, anything. They just have to pay, and the payment slip is true, and the transaction ID should be true. That's all."
+- Reference ID is a must AND screenshot is a must, together, at submit time. A payment can never become pending without a screenshot — "a screenshot or no, you know" — so the "attach a screenshot later" idea is dead.
+- Screenshot links live on Haider's own Hostinger server; the database stores only the link. Because the database is on a free limit, there must be a cleanup option: a purge (like a kill switch for links) that deletes all screenshot links from the database after he zips the files from the server to his own drive. The payment keeps its reference ID, payer, and date — only the link goes.
+- Every screenshot on the server needs a gallery section where he can see all of them (app work; the database provides the list feed).
+- "The link should not break. You need to make this one very strong." → a database guard blocks silent link deletion, blocks verification without a screenshot, and blocks hand-flipping the exemption; only the purge can clear links (marking those payments exempt so history keeps working).
+
+Locked:
+
+- Any payment method allowed; slip genuine, reference ID true.
+- Payments submitted before 180000 ran are grandfathered (exempt) and work as before.
+- Purge is super-admin only (per tournament, or everything); purge marks payments exempt.
+- Captain can replace a wrong screenshot while the payment is still pending (there is always a screenshot — this only swaps one for another).
+- Captains and admins can see payment rows, so screenshots stay under the same privacy.
