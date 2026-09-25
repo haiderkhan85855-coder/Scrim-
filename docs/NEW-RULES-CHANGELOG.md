@@ -133,3 +133,27 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
   session / match permanent cancel stays 3-step unless Haider says otherwise.
 - Open: whether a separate freeze-everything switch is also wanted — that's
   another file if so.
+
+## 2026-09-25
+
+### Team notifications + bulk entry shift
+- **Shift authority for new entries** (built: `20260924140000`, pushed):
+  when many teams sit in a lobby and new entries come in, the admin shifts
+  them to the next session with `levelledup_admin_move_session_entries` —
+  one call moves a whole list, same guards per entry as the single move
+  (same stage only, target session not started, entry unused, team unassigned,
+  room in target). Moves what is movable, skips the rest with reasons,
+  returns `{moved, skipped}`. Re-running is safe (already-moved = no-op).
+- **Notifications are team-wide, not captain-only** (Haider's words): the
+  notification is pushed to the team, and EVERY person in the team sees it in
+  their profile notification section as a team notification.
+- **No old notifications for new joiners**: at push time the notification is
+  fanned out to current active roster members only. A player who joins later
+  never sees earlier ones; leaving and rejoining does not resurrect them.
+- **Anyone can delete — their own view only**: any team member may delete one,
+  several, or all of their notifications. Deleting clears only that person's
+  own rows; teammates still see theirs.
+- Read/unread is per person. A trigger fires the notification automatically
+  on every active entry session change ("Your entry for [Tournament] was
+  moved from Session 2 to Session 3. Reason: ..."). Direct table writes are
+  refused; only the trigger inserts.
