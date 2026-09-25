@@ -111,3 +111,25 @@ His language only: tournament / stage / session / lobby A, B — no invented ter
   browse but cannot write while enabled; backend enforcement. Global vs
   per-tournament scope, in-flight requests, reason, audit, UI explanation —
   all undecided.
+
+## 2026-09-25
+
+### Cancellation, credit refunds, kill switch (stated by Haider 2026-09-25, pending his confirmation)
+- Cancel & Recreate (cancelled in order to make it again) → NO credit refund.
+  Teams migrate to the replacement; the money stays in play.
+- Permanent cancel (confirmation → type tournament ID → one more confirmation,
+  with NO intention of continuation) of a tournament, stage, or session →
+  people get credit back for UNUSED paid entries only. Credit lands on the
+  payer's profile; they can withdraw it (manual EasyPaisa, as before) or use
+  it as top-up balance.
+- No refund for consumed entries: played-and-failed and played-and-won/
+  advanced both count as used — neither gets credit when something is
+  cancelled. Needs entry lifecycle tracking: consumed = the team played at
+  least one match in that session.
+- The tournament kill switch IS the permanent tournament cancel, with 4-step
+  verification: (1) confirmation, (2) type the tournament ID, (3) one more
+  confirmation, (4) captcha-style final check. The captcha renders in the UI;
+  the backend requires and audits all four distinct confirmations. Stage /
+  session / match permanent cancel stays 3-step unless Haider says otherwise.
+- Open: whether a separate freeze-everything switch is also wanted — that's
+  another file if so.
