@@ -236,3 +236,56 @@ Locked:
 - Purge is super-admin only (per tournament, or everything); purge marks payments exempt.
 - Captain can replace a wrong screenshot while the payment is still pending (there is always a screenshot — this only swaps one for another).
 - Captains and admins can see payment rows, so screenshots stay under the same privacy.
+
+## 2026-09-25 — Earned-entry queue model (195000)
+
+Built: `20260924195000`, pushed, Haider confirmed it ran clean in the SQL editor.
+
+Haider's words and decisions:
+
+- "I place everyone myself (queue)" — nobody is auto-placed into a session or
+  lobby, paid or free. Every buy and every earned entry lands in one queue per
+  stage, numbered in join order: #1 PAID, #2 PAID, #3 EARNED, #4 PAID...
+- No auto-bumping of earned entries, no over-capacity auto placement. Haider
+  manages capacity himself.
+- Per-session max-teams number is his lobby-capacity control (16 teams per
+  lobby, PUBG standard). Lowering it never removes already-placed teams.
+- He closes entries per stage himself: "Too many entries here — you can turn
+  the entry off."
+- Placement UI: + box, tap teams, confirm, assign session/lobby, Finalize —
+  teams are notified only on Finalize. Before that, picks are private and
+  changeable.
+- Paid-first: the paid entry is used before the earned one.
+- Free-entry warning before buying: "You already have a FREE session — you
+  earned it by qualifying. Use it before paying?" — [Use my free session] /
+  [Pay anyway]; paying anyway is legal.
+- Earned entries are stage-scoped: no refund, no credit, cannot move to a
+  later stage.
+- A leftover earned entry may be played for fun: "You still have a FREE Stage
+  2 entry — play it in a later Stage 2 session or lose it. No refund, it
+  cannot move to Stage 3." Scores count normally; qualification standing never
+  changes.
+- Unused earned entries lapse at stage end / tournament cancellation / team
+  removal — zero value.
+- Multi-lobby multi-device (5 lobbies at once across devices) parked for its
+  own rules pass later.
+
+Corrections and supersessions (append-only — old entries above untouched,
+latest decision wins):
+
+- The 160000 entry said "qualified → next stage, first session, FREE" — now:
+  qualified → next stage queue (#N, FREE), admin places.
+- 190000's "captain must choose a session" is replaced by the queue model
+  (Haider places everyone). The old functions were replaced in the database,
+  not kept alongside — no live conflict. Entries bought before 195000 stay
+  placed and are marked finalized.
+- 160000 bug fixed: the earned entry is always its own separate row now —
+  never linked to a paid entry, so revoking a qualification can never cancel
+  someone's paid entry.
+- 130000 defect found and fixed: the old history guard made session_id
+  unchangeable, so the admin "move entry to another session" button could
+  never actually work. The guard is widened in 195000 (a session may change
+  while the entry is active).
+- 190000 payment reference correction: only pending and verified payments
+  reserve a manual-payment reference; rejected rows are history and may reuse
+  it.
